@@ -477,24 +477,56 @@
     -webkit-user-select: none;
     -webkit-touch-callout: none;
   }
+  /* 全画面の拡大表示(2本指でつまんで拡大・縮小、1本指でずらす) */
   .photo-stage.zoomed {
     position: fixed;
     inset: 0;
     z-index: 50;
     height: auto;
     display: block;
-    overflow: auto;
-    touch-action: auto;
+    overflow: hidden;
+    touch-action: none;
   }
   .photo-stage.zoomed img {
+    position: absolute;
+    left: 0;
+    top: 0;
     max-width: none;
     max-height: none;
-    width: 200%;
+    transform-origin: 0 0;
+    will-change: transform;
   }
-  /* 元の画質のときは、画像の本来の大きさ(1ピクセル=画面の1ピクセル)で表示する */
-  .photo-stage.zoomed.orig img {
-    width: auto;
+  .photo-stage.zoomed img.settle {
+    transition: transform 0.18s ease-out;
   }
+  .viewer-close {
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top));
+    right: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    z-index: 2;
+  }
+  .viewer-badge {
+    position: absolute;
+    top: max(18px, calc(env(safe-area-inset-top) + 8px));
+    left: 12px;
+    font-size: 12px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 4px 8px;
+    border-radius: 8px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .photo-stage:not(.zoomed) .viewer-close,
+  .photo-stage:not(.zoomed) .viewer-badge { display: none; }
   .orig-row {
     display: flex;
     align-items: center;
@@ -1003,6 +1035,8 @@
       <button id="photoPrevBtn" class="nav-arrow left" aria-label="前の写真">‹</button>
       <button id="photoNextBtn" class="nav-arrow right" aria-label="次の写真">›</button>
       <div id="photoLoading" class="loading-note hidden">読み込み中…</div>
+      <span id="viewerBadge" class="viewer-badge"></span>
+      <button id="viewerCloseBtn" class="viewer-close" aria-label="閉じる">✕</button>
     </div>
     <div class="fields">
       <div class="orig-row">
@@ -1715,7 +1749,7 @@
     if (!modalOverlay.classList.contains('hidden')) { $('modalCancel').click(); return; }
     if (!pickerOverlay.classList.contains('hidden')) { closePicker(); return; }
     if (!settingsOverlay.classList.contains('hidden')) { settingsOverlay.classList.add('hidden'); return; }
-    if ($('photoStage').classList.contains('zoomed')) { $('photoStage').classList.remove('zoomed'); return; }
+    if ($('photoStage').classList.contains('zoomed')) { closeViewer(); return; }
     if (selecting) { exitSelect(); return; }
     popView();
   }
@@ -2308,7 +2342,8 @@
     const v = topView();
     const p = currentPhoto();
     if (!p) { popView(); return; }
-    photoStage.classList.remove('zoomed', 'orig');
+    closeViewer();
+    photoStage.classList.remove('orig');
     $('photoOrigBtn').disabled = false;
     $('photoOrigNote').textContent = '';
     $('photoTitle').textContent = p.name;
@@ -2426,9 +2461,200 @@
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) showSibling(dx < 0 ? 1 : -1);
   });
   photoImg.addEventListener('click', () => {
-    const z = photoStage.classList.toggle('zoomed');
-    if (z) ensureTrap();
+    if (!photoStage.classList.contains('zoomed')) openViewer('fit');
   });
+
+  // ---------- 全画面の拡大表示(つまんで拡大・縮小) ----------
+  // 画像を本来の大きさで置き、transform(移動+倍率)で見せる。倍率1 = 画像の1ピクセルが画面の1ピクセル
+  const zs = { scale: 1, tx: 0, ty: 0, fit: 1, mode: 'fit', touched: false };
+  const zPointers = new Map();
+  let zGesture = null;
+  let lastTap = null;
+
+  function imgSize() {
+    return { w: photoImg.naturalWidth || 1, h: photoImg.naturalHeight || 1 };
+  }
+
+  function applyZoom(animate) {
+    photoImg.classList.toggle('settle', !!animate);
+    photoImg.style.transform = `translate(${zs.tx}px, ${zs.ty}px) scale(${zs.scale})`;
+  }
+
+  function maxScale() {
+    return Math.max(4, zs.fit * 4);
+  }
+
+  // 拡大しすぎ・縮めすぎ・画面の外へずれすぎを、指を離したときに戻す
+  function clampZoom() {
+    const W = photoStage.clientWidth;
+    const H = photoStage.clientHeight;
+    zs.scale = Math.min(Math.max(zs.scale, zs.fit), maxScale());
+    const { w, h } = imgSize();
+    const sw = w * zs.scale;
+    const sh = h * zs.scale;
+    zs.tx = sw <= W ? (W - sw) / 2 : Math.min(0, Math.max(W - sw, zs.tx));
+    zs.ty = sh <= H ? (H - sh) / 2 : Math.min(0, Math.max(H - sh, zs.ty));
+  }
+
+  // 指定した画面上の点を中心に、倍率を変える
+  function zoomAt(newScale, cx, cy) {
+    const ix = (cx - zs.tx) / zs.scale;
+    const iy = (cy - zs.ty) / zs.scale;
+    zs.scale = newScale;
+    zs.tx = cx - ix * newScale;
+    zs.ty = cy - iy * newScale;
+  }
+
+  function resetZoom(mode) {
+    const W = photoStage.clientWidth;
+    const H = photoStage.clientHeight;
+    const { w, h } = imgSize();
+    zs.fit = Math.min(W / w, H / h);
+    zs.scale = mode === 'actual' ? Math.max(1, zs.fit) : zs.fit;
+    zs.tx = (W - w * zs.scale) / 2;
+    zs.ty = (H - h * zs.scale) / 2;
+    clampZoom();
+    applyZoom(false);
+  }
+
+  function updateViewerBadge() {
+    $('viewerBadge').textContent = photoStage.classList.contains('orig')
+      ? (photoImg.complete && photoImg.naturalWidth ? `元の画質 ${photoImg.naturalWidth}×${photoImg.naturalHeight}` : '元の画質')
+      : '表示用の画像';
+  }
+
+  function openViewer(mode) {
+    zs.mode = mode;
+    zs.touched = false;
+    photoStage.classList.add('zoomed');
+    updateViewerBadge();
+    resetZoom(mode);
+    ensureTrap();
+  }
+
+  function closeViewer() {
+    photoStage.classList.remove('zoomed');
+    photoImg.classList.remove('settle');
+    photoImg.style.transform = '';
+    zPointers.clear();
+    zGesture = null;
+  }
+
+  // 大きい画像の読み込みが後から終わったときなどは、まだ触っていなければ表示し直す
+  photoImg.addEventListener('load', () => {
+    if (!photoStage.classList.contains('zoomed')) return;
+    updateViewerBadge();
+    if (!zs.touched) resetZoom(zs.mode);
+    else { clampZoom(); applyZoom(false); }
+  });
+  window.addEventListener('resize', () => {
+    if (photoStage.classList.contains('zoomed')) resetZoom(zs.mode);
+  });
+
+  function startGesture() {
+    const pts = Array.from(zPointers.values());
+    if (pts.length >= 2) {
+      const [a, b] = pts;
+      zGesture = {
+        type: 'pinch',
+        dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+        scale: zs.scale,
+        ix: ((a.x + b.x) / 2 - zs.tx) / zs.scale,
+        iy: ((a.y + b.y) / 2 - zs.ty) / zs.scale
+      };
+    } else if (pts.length === 1) {
+      zGesture = { type: 'pan', x: pts[0].x, y: pts[0].y };
+    } else {
+      zGesture = null;
+    }
+  }
+
+  photoStage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    zPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!photoStage.classList.contains('zoomed')) {
+      // 普段の表示で2本指でつまんだら、そのまま拡大表示に切り替える
+      if (zPointers.size >= 2) {
+        swipeStart = null;
+        openViewer('fit');
+        zPointers.forEach((_, id) => { try { photoStage.setPointerCapture(id); } catch (err) { /* no-op */ } });
+        zs.touched = true;
+        startGesture();
+      }
+      return;
+    }
+    try { photoStage.setPointerCapture(e.pointerId); } catch (err) { /* no-op */ }
+    zs.touched = true;
+    photoImg.classList.remove('settle');
+    // ダブルタップ: 全体表示 ⇔ 拡大
+    if (zPointers.size === 1) {
+      const now = Date.now();
+      if (lastTap && now - lastTap.t < 300 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
+        lastTap = null;
+        const target = zs.scale > zs.fit * 1.05 ? zs.fit : Math.min(maxScale(), Math.max(1, zs.fit * 2.5));
+        const r = photoStage.getBoundingClientRect();
+        zoomAt(target, e.clientX - r.left, e.clientY - r.top);
+        clampZoom();
+        applyZoom(true);
+        zGesture = null;
+        return;
+      }
+      lastTap = { t: now, x: e.clientX, y: e.clientY };
+    }
+    startGesture();
+  });
+
+  photoStage.addEventListener('pointermove', (e) => {
+    if (!zPointers.has(e.pointerId)) return;
+    zPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!photoStage.classList.contains('zoomed') || !zGesture) return;
+    const r = photoStage.getBoundingClientRect();
+    if (zGesture.type === 'pinch' && zPointers.size >= 2) {
+      const [a, b] = Array.from(zPointers.values());
+      const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      // 指を離すまでは、全体表示より少し小さくまで縮められる(離すと戻る)
+      const s = Math.min(Math.max(zGesture.scale * dist / zGesture.dist, zs.fit * 0.6), maxScale() * 1.3);
+      const mx = (a.x + b.x) / 2 - r.left;
+      const my = (a.y + b.y) / 2 - r.top;
+      zs.scale = s;
+      zs.tx = mx - zGesture.ix * s;
+      zs.ty = my - zGesture.iy * s;
+      applyZoom(false);
+    } else if (zGesture.type === 'pan') {
+      zs.tx += e.clientX - zGesture.x;
+      zs.ty += e.clientY - zGesture.y;
+      zGesture.x = e.clientX;
+      zGesture.y = e.clientY;
+      applyZoom(false);
+    }
+  });
+
+  function endPointer(e) {
+    if (!zPointers.has(e.pointerId)) return;
+    zPointers.delete(e.pointerId);
+    if (!photoStage.classList.contains('zoomed')) return;
+    if (zPointers.size) { startGesture(); return; }
+    zGesture = null;
+    clampZoom();
+    applyZoom(true);
+  }
+  photoStage.addEventListener('pointerup', endPointer);
+  photoStage.addEventListener('pointerleave', (e) => { if (!photoStage.classList.contains('zoomed')) zPointers.delete(e.pointerId); });
+  photoStage.addEventListener('pointercancel', endPointer);
+
+  // パソコンではマウスホイールで拡大・縮小
+  photoStage.addEventListener('wheel', (e) => {
+    if (!photoStage.classList.contains('zoomed')) return;
+    e.preventDefault();
+    zs.touched = true;
+    const r = photoStage.getBoundingClientRect();
+    zoomAt(zs.scale * Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+    clampZoom();
+    applyZoom(false);
+  }, { passive: false });
+
+  $('viewerCloseBtn').addEventListener('click', (e) => { e.stopPropagation(); closeViewer(); });
 
   // 元の画質で見る: 押したときだけ、端末内(アップロード待ち)かGoogleドライブから元の写真を読み込む
   async function getOriginalBlob(p) {
@@ -2445,7 +2671,7 @@
     if (!p) return;
     const btn = $('photoOrigBtn');
     const note = $('photoOrigNote');
-    if (photoStage.classList.contains('orig')) { openOriginalZoom(); return; }
+    if (photoStage.classList.contains('orig')) { openViewer('actual'); return; }
     btn.disabled = true;
     note.textContent = '元の写真を読み込み中…';
     let blob = null;
@@ -2473,19 +2699,9 @@
     photoImg.src = url;
     photoStage.classList.add('orig');
     note.textContent = `元の画質 ${test.naturalWidth} × ${test.naturalHeight}`;
-    openOriginalZoom();
+    // 等倍(画像の1ピクセル=画面の1ピクセル)で真ん中から表示。つまむと縮小できる
+    openViewer('actual');
   });
-
-  function openOriginalZoom() {
-    photoStage.classList.add('zoomed');
-    ensureTrap();
-    // 写真の真ん中あたりから見られるようにする
-    setTimeout(() => {
-      photoStage.scrollLeft = (photoStage.scrollWidth - photoStage.clientWidth) / 2;
-      photoStage.scrollTop = (photoStage.scrollHeight - photoStage.clientHeight) / 2;
-    }, 50);
-    showToast('写真をタップすると元の表示に戻ります');
-  }
 
   // ---------- 振り分けモード ----------
   let sortState = null; // { skipped:Set, undo:[], currentId }
