@@ -491,6 +491,17 @@
     max-height: none;
     width: 200%;
   }
+  /* 元の画質のときは、画像の本来の大きさ(1ピクセル=画面の1ピクセル)で表示する */
+  .photo-stage.zoomed.orig img {
+    width: auto;
+  }
+  .orig-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .orig-row .meta-text { flex: 1; }
   .nav-arrow {
     position: absolute;
     top: 50%;
@@ -994,6 +1005,10 @@
       <div id="photoLoading" class="loading-note hidden">読み込み中…</div>
     </div>
     <div class="fields">
+      <div class="orig-row">
+        <button id="photoOrigBtn" class="small-btn">🔍 元の画質で見る</button>
+        <span id="photoOrigNote" class="meta-text"></span>
+      </div>
       <label class="field-label" for="photoName">名前</label>
       <input id="photoName" type="text" class="field-input">
       <label class="field-label">撮影日</label>
@@ -2293,7 +2308,9 @@
     const v = topView();
     const p = currentPhoto();
     if (!p) { popView(); return; }
-    photoStage.classList.remove('zoomed');
+    photoStage.classList.remove('zoomed', 'orig');
+    $('photoOrigBtn').disabled = false;
+    $('photoOrigNote').textContent = '';
     $('photoTitle').textContent = p.name;
     const list = photoList();
     const idx = list.indexOf(p.id);
@@ -2412,6 +2429,63 @@
     const z = photoStage.classList.toggle('zoomed');
     if (z) ensureTrap();
   });
+
+  // 元の画質で見る: 押したときだけ、端末内(アップロード待ち)かGoogleドライブから元の写真を読み込む
+  async function getOriginalBlob(p) {
+    const pend = await idbGet('pending', p.id);
+    if (pend) return pend;
+    if (!p.driveId || !accessToken) return null;
+    const res = await driveApiFetch(`/drive/v3/files/${p.driveId}?alt=media`);
+    return res.ok ? res.blob() : null;
+  }
+
+  $('photoOrigBtn').addEventListener('click', async () => {
+    const v = topView();
+    const p = currentPhoto();
+    if (!p) return;
+    const btn = $('photoOrigBtn');
+    const note = $('photoOrigNote');
+    if (photoStage.classList.contains('orig')) { openOriginalZoom(); return; }
+    btn.disabled = true;
+    note.textContent = '元の写真を読み込み中…';
+    let blob = null;
+    try { blob = await getOriginalBlob(p); } catch (e) { blob = null; }
+    const still = () => topView() === v && v.id === p.id;
+    if (!still()) return;
+    btn.disabled = false;
+    if (!blob) {
+      note.textContent = p.driveId ? (accessToken ? '読み込めませんでした' : 'Googleにサインインすると見られます') : 'まだ別の端末からアップロードされていません';
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const test = new Image();
+    test.src = url;
+    try {
+      await test.decode();
+    } catch (e) {
+      URL.revokeObjectURL(url);
+      note.textContent = 'この写真の形式はこの端末では表示できません';
+      return;
+    }
+    if (!still()) { URL.revokeObjectURL(url); return; }
+    if (photoImg.dataset.url) URL.revokeObjectURL(photoImg.dataset.url);
+    photoImg.dataset.url = url;
+    photoImg.src = url;
+    photoStage.classList.add('orig');
+    note.textContent = `元の画質 ${test.naturalWidth} × ${test.naturalHeight}`;
+    openOriginalZoom();
+  });
+
+  function openOriginalZoom() {
+    photoStage.classList.add('zoomed');
+    ensureTrap();
+    // 写真の真ん中あたりから見られるようにする
+    setTimeout(() => {
+      photoStage.scrollLeft = (photoStage.scrollWidth - photoStage.clientWidth) / 2;
+      photoStage.scrollTop = (photoStage.scrollHeight - photoStage.clientHeight) / 2;
+    }, 50);
+    showToast('写真をタップすると元の表示に戻ります');
+  }
 
   // ---------- 振り分けモード ----------
   let sortState = null; // { skipped:Set, undo:[], currentId }
