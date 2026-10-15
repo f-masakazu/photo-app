@@ -1,5 +1,5 @@
 {
-  "id": "./",
+  "id": "./?app=photo-organizer",
   "name": "写真整理",
   "short_name": "写真整理",
   "description": "個人用の写真整理アプリ(Googleドライブ保存)",
