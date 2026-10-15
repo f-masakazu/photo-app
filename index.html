@@ -1,0 +1,3404 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2f6f62">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="写真整理">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>写真整理</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --border: #e3e0d6;
+    --ink: #26282a;
+    --ink-muted: #85827a;
+    --accent: #2f6f62;
+    --accent-soft: #e8f1ee;
+    --folder: #d9a441;
+    --danger: #b5482f;
+    --photo-bg: #111;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1c1b;
+      --surface: #242726;
+      --border: #383c3a;
+      --ink: #e8ebe8;
+      --ink-muted: #959b97;
+      --accent: #7cc0ae;
+      --accent-soft: #283a35;
+      --folder: #e0b45c;
+      --danger: #e0715a;
+      --photo-bg: #000;
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    overscroll-behavior: none;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  }
+
+  .hidden { display: none !important; }
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* --- topbar --- */
+  .topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: max(12px, env(safe-area-inset-top)) 10px 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .breadcrumb {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+  }
+  .crumb {
+    color: var(--accent);
+    padding: 2px 4px;
+    cursor: pointer;
+  }
+  .crumb-current {
+    color: var(--ink);
+    cursor: default;
+    font-weight: 600;
+  }
+  .crumb-sep {
+    color: var(--ink-muted);
+    opacity: 0.6;
+  }
+  .topbar-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .icon-btn {
+    flex: 0 0 auto;
+    background: none;
+    border: none;
+    font-size: 18px;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    color: var(--ink-muted);
+  }
+  .icon-btn:active { background: var(--accent-soft); }
+  .home-btn { font-size: 24px; padding: 4px 6px; }
+  .back-icon-btn {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .back-icon-btn:active { opacity: 0.8; }
+
+  /* --- action bar --- */
+  .actionbar {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .actionbar button {
+    flex: 1;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 0;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .actionbar button.primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .selectbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--accent);
+    color: #fff;
+  }
+  .selectbar .sel-count {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .selectbar button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    cursor: pointer;
+  }
+  .selectbar button.strong {
+    background: #fff;
+    color: var(--accent);
+  }
+
+  /* --- list --- */
+  .list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 6px 10px calc(20px + env(safe-area-inset-bottom));
+  }
+  .empty {
+    text-align: center;
+    color: var(--ink-muted);
+    font-size: 14px;
+    margin: 24px 0;
+    line-height: 1.6;
+  }
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 14px 2px 6px;
+    font-size: 13px;
+    color: var(--ink-muted);
+    font-weight: 600;
+  }
+  .small-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent-soft);
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 6px 10px 12px;
+    margin: 6px 0;
+  }
+  .row-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .row-icon {
+    flex: 0 0 auto;
+    font-size: 22px;
+    width: 26px;
+    text-align: center;
+  }
+  .row-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .row-name {
+    font-size: 15px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row-meta {
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+  .row-actions {
+    flex: 0 0 auto;
+    display: flex;
+  }
+  .row-actions .icon-btn { font-size: 16px; }
+
+  /* --- 未整理カード --- */
+  .unsorted-card {
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    border-radius: 14px;
+    padding: 14px;
+    margin: 8px 0 6px;
+  }
+  .unsorted-card.done {
+    border-color: var(--border);
+  }
+  .unsorted-top {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .unsorted-label {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .unsorted-num {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .unsorted-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .unsorted-actions button {
+    flex: 1;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 4px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-soft { background: var(--accent-soft); color: var(--accent); }
+  .status-line {
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin-top: 8px;
+  }
+
+  /* --- 写真グリッド --- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 4px;
+  }
+  .tile {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--border);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+  }
+  .tile img:not([src]) { visibility: hidden; }
+  .tile-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    font-size: 10px;
+    color: #fff;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+    padding: 12px 5px 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
+  .tile-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    border-radius: 6px;
+    padding: 1px 4px;
+    pointer-events: none;
+  }
+  .tile-check {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: rgba(0, 0, 0, 0.25);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .selecting .tile-check { display: flex; }
+  .tile.selected .tile-check { background: var(--accent); }
+  .tile.selected img { opacity: 0.7; }
+  .tile.selected { box-shadow: 0 0 0 3px var(--accent) inset; }
+
+  /* --- 日付検索 --- */
+  .search-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    margin: 8px 0;
+  }
+  .seg {
+    display: flex;
+    background: var(--accent-soft);
+    border-radius: 10px;
+    padding: 3px;
+    margin-bottom: 10px;
+  }
+  .seg button {
+    flex: 1;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 0;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .seg button.on {
+    background: var(--surface);
+    color: var(--accent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+  .date-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .date-row input {
+    flex: 1;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin: 6px 0 0;
+  }
+  .quick-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .day-head {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 14px 2px 6px;
+  }
+
+  /* --- 写真の詳細 --- */
+  .photo-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
+  .photo-stage {
+    position: relative;
+    background: var(--photo-bg);
+    height: 58vh;
+    height: 58dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    touch-action: pan-y;
+  }
+  .photo-stage img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .photo-stage.zoomed {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    height: auto;
+    display: block;
+    overflow: auto;
+    touch-action: auto;
+  }
+  .photo-stage.zoomed img {
+    max-width: none;
+    max-height: none;
+    width: 200%;
+  }
+  .nav-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 56px;
+    border: none;
+    background: rgba(0, 0, 0, 0.35);
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+  }
+  .nav-arrow.left { left: 0; border-radius: 0 10px 10px 0; }
+  .nav-arrow.right { right: 0; border-radius: 10px 0 0 10px; }
+  .zoomed .nav-arrow { display: none; }
+  .loading-note {
+    position: absolute;
+    bottom: 8px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: #ddd;
+  }
+  .fields {
+    padding: 14px 14px calc(24px + env(safe-area-inset-bottom));
+  }
+  .field-label {
+    display: block;
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin: 0 0 4px;
+  }
+  .field-input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    margin-bottom: 14px;
+  }
+  textarea.field-input {
+    min-height: 90px;
+    resize: vertical;
+    line-height: 1.6;
+  }
+  .field-pair {
+    display: flex;
+    gap: 8px;
+  }
+  .field-pair input:first-child { flex: 3; }
+  .field-pair input:last-child { flex: 2; }
+  .place-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .place-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+  }
+  .meta-text {
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.7;
+  }
+
+  /* --- 振り分けモード --- */
+  .sort-stage {
+    flex: 1 1 auto;
+    min-height: 120px;
+    background: var(--photo-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .sort-stage img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .sort-info {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+  .sort-info .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sort-panel {
+    flex: 0 0 auto;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+    max-height: 48vh;
+    overflow-y: auto;
+  }
+  .sort-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .sort-controls button {
+    flex: 1;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 11px 0;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .sort-controls button:disabled { opacity: 0.4; }
+  .dest-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .dest-btn {
+    font-family: inherit;
+    text-align: left;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .dest-btn:active { opacity: 0.8; }
+  .dest-btn .dest-name {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dest-btn .dest-sub {
+    display: block;
+    font-size: 11px;
+    opacity: 0.8;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dest-btn.other {
+    background: var(--accent-soft);
+    color: var(--accent);
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+  .sort-done {
+    color: #eee;
+    text-align: center;
+    padding: 20px;
+    line-height: 1.8;
+  }
+  .flash {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* --- modal --- */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 10;
+  }
+  #modalOverlay { z-index: 20; }
+  .modal {
+    width: 100%;
+    max-width: 380px;
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .modal-message {
+    margin: 0 0 12px;
+    font-size: 15px;
+    line-height: 1.5;
+    font-weight: 600;
+  }
+  .modal-sub {
+    margin: -6px 0 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-muted);
+  }
+  .sync-status {
+    margin: -6px 0 12px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+  .modal-input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 15px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--ink);
+    margin-bottom: 14px;
+  }
+  .restore-error {
+    margin: -8px 0 12px;
+    font-size: 13px;
+    color: var(--danger);
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .modal-actions button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+  }
+  .settings-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .settings-actions button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+  }
+  .modal-btn-secondary {
+    background: var(--accent-soft);
+    color: var(--ink-muted);
+  }
+  .modal-btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .modal-btn-danger {
+    background: var(--danger);
+    color: #fff;
+  }
+
+  /* --- 行き先フォルダを選ぶ画面 --- */
+  .picker {
+    display: flex;
+    flex-direction: column;
+    max-height: 88vh;
+    max-height: 88dvh;
+  }
+  .picker .modal-input { margin-bottom: 10px; }
+  .picker-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 120px;
+    margin-bottom: 12px;
+  }
+  .picker-label {
+    font-size: 12px;
+    color: var(--ink-muted);
+    font-weight: 600;
+    margin: 4px 0 6px;
+  }
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .chip {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 18px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .picker-crumb {
+    margin: 0 0 6px;
+    font-size: 13px;
+  }
+  .pick-list {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .pick-row {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--border);
+  }
+  .pick-row:last-child { border-bottom: none; }
+  .pick-main {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 14px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .pick-main:active, .pick-open:active { background: var(--accent-soft); }
+  .pick-main .pick-path {
+    display: block;
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+  .pick-open {
+    flex: 0 0 auto;
+    width: 64px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: none;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .pick-empty {
+    padding: 14px;
+    font-size: 13px;
+    color: var(--ink-muted);
+    text-align: center;
+  }
+  .picker-bottom {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .picker-bottom button {
+    flex: 1 1 auto;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 11px 10px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+  }
+
+  /* --- toast --- */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    background: rgba(30, 30, 30, 0.92);
+    color: #fff;
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    z-index: 60;
+    max-width: 90%;
+    text-align: center;
+  }
+
+  /* --- PINロック画面 --- */
+  .lock-view {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .lock-box {
+    width: 100%;
+    max-width: 300px;
+  }
+  .lock-message {
+    font-size: 15px;
+    margin: 0 0 14px;
+    text-align: center;
+    color: var(--ink);
+  }
+  .lock-input {
+    text-align: center;
+    letter-spacing: 6px;
+    font-size: 20px;
+    -webkit-text-security: disc;
+  }
+  .lock-submit-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+  }
+  .lock-bio-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px;
+    font-size: 15px;
+  }
+</style>
+</head>
+<body>
+
+<div id="lockView" class="lock-view">
+  <div class="lock-box">
+    <p id="lockMessage" class="lock-message">PINコードを入力してください</p>
+    <input id="lockInput" type="text" inputmode="numeric" class="modal-input lock-input" placeholder="PINコード" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="photoAppLockField1" />
+    <input id="lockConfirmInput" type="text" inputmode="numeric" class="modal-input lock-input hidden" placeholder="もう一度入力" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="photoAppLockField2" />
+    <p id="lockError" class="restore-error hidden"></p>
+    <button id="lockSubmitBtn" class="modal-btn-primary lock-submit-btn">OK</button>
+    <button id="lockBioBtn" class="modal-btn-secondary lock-bio-btn hidden">👆 指紋で解除</button>
+  </div>
+</div>
+
+<!-- 一覧(ホーム・フォルダ・未整理・日付で探す) -->
+<div id="mainView" class="screen">
+  <header class="topbar">
+    <button id="backBtn" class="back-icon-btn hidden" aria-label="戻る">←</button>
+    <button id="homeBtn" class="icon-btn home-btn" aria-label="ホーム">🏠</button>
+    <div id="breadcrumb" class="breadcrumb"></div>
+    <button id="dateSearchBtn" class="icon-btn" aria-label="日付で探す">📅</button>
+    <button id="settingsBtn" class="icon-btn" aria-label="設定">⚙</button>
+  </header>
+  <div id="actionbar" class="actionbar">
+    <button id="cameraBtn" class="primary" data-skip-signin="1">📷 撮影</button>
+    <button id="pickBtn" data-skip-signin="1">🖼 写真を選ぶ</button>
+    <button id="newFolderBtn">＋ フォルダ</button>
+  </div>
+  <div id="selectbar" class="selectbar hidden">
+    <span id="selCount" class="sel-count"></span>
+    <button id="selAllBtn">全選択</button>
+    <button id="selDeleteBtn">削除</button>
+    <button id="selMoveBtn" class="strong">移動</button>
+    <button id="selCancelBtn">✕</button>
+  </div>
+  <main id="content" class="list"></main>
+</div>
+
+<!-- 写真の詳細 -->
+<div id="photoView" class="screen hidden">
+  <header class="topbar">
+    <button id="photoBackBtn" class="back-icon-btn" aria-label="戻る">←</button>
+    <span id="photoTitle" class="topbar-title"></span>
+    <span id="photoPos" class="row-meta"></span>
+    <button id="photoDeleteBtn" class="icon-btn" aria-label="削除">🗑️</button>
+  </header>
+  <div class="photo-scroll">
+    <div id="photoStage" class="photo-stage">
+      <img id="photoImg" alt="">
+      <button id="photoPrevBtn" class="nav-arrow left" aria-label="前の写真">‹</button>
+      <button id="photoNextBtn" class="nav-arrow right" aria-label="次の写真">›</button>
+      <div id="photoLoading" class="loading-note hidden">読み込み中…</div>
+    </div>
+    <div class="fields">
+      <label class="field-label" for="photoName">名前</label>
+      <input id="photoName" type="text" class="field-input">
+      <label class="field-label">撮影日</label>
+      <div class="field-pair">
+        <input id="photoDate" type="date" class="field-input">
+        <input id="photoTime" type="time" class="field-input">
+      </div>
+      <label class="field-label" for="photoMemo">メモ</label>
+      <textarea id="photoMemo" class="field-input" placeholder="メモを入力..."></textarea>
+      <span class="field-label">入っているフォルダ</span>
+      <div class="place-row">
+        <span id="photoPlace" class="place-name"></span>
+        <button id="photoMoveBtn" class="small-btn">移動</button>
+      </div>
+      <div id="photoMeta" class="meta-text"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 振り分けモード -->
+<div id="sortView" class="screen hidden">
+  <header class="topbar">
+    <button id="sortBackBtn" class="back-icon-btn" aria-label="終了">←</button>
+    <span id="sortTitle" class="topbar-title">振り分け</span>
+    <button id="sortInfoBtn" class="icon-btn" aria-label="名前・メモを編集">✏️</button>
+    <button id="sortDeleteBtn" class="icon-btn" aria-label="削除">🗑️</button>
+  </header>
+  <div id="sortStage" class="sort-stage">
+    <img id="sortImg" alt="">
+    <div id="sortDone" class="sort-done hidden"></div>
+  </div>
+  <div id="sortInfo" class="sort-info">
+    <span id="sortName" class="name"></span>
+    <span id="sortDate" class="row-meta"></span>
+  </div>
+  <div class="sort-panel">
+    <div class="sort-controls">
+      <button id="sortUndoBtn">↩ 戻す</button>
+      <button id="sortSkipBtn">あとで ›</button>
+    </div>
+    <div id="destGrid" class="dest-grid"></div>
+  </div>
+</div>
+
+<div id="modalOverlay" class="modal-overlay hidden">
+  <div class="modal">
+    <p id="modalMessage" class="modal-message"></p>
+    <p id="modalSub" class="modal-sub hidden"></p>
+    <input id="modalInput" type="text" class="modal-input" />
+    <div class="modal-actions">
+      <button id="modalCancel" class="modal-btn-secondary">キャンセル</button>
+      <button id="modalOk" class="modal-btn-primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="pickerOverlay" class="modal-overlay hidden">
+  <div class="modal picker">
+    <p id="pickerTitle" class="modal-message">行き先のフォルダ</p>
+    <input id="pickerSearch" type="search" class="modal-input" placeholder="🔍 フォルダ名で検索">
+    <div class="picker-scroll">
+      <div id="pickerRecentWrap">
+        <p class="picker-label">最近使ったフォルダ</p>
+        <div id="pickerRecent" class="chip-row"></div>
+      </div>
+      <div id="pickerCrumb" class="breadcrumb picker-crumb"></div>
+      <div id="pickerList" class="pick-list"></div>
+    </div>
+    <div class="picker-bottom">
+      <button id="pickerNewBtn" class="modal-btn-secondary">＋ 新しいフォルダ</button>
+      <button id="pickerUnsortedBtn" class="modal-btn-secondary">📥 未整理に戻す</button>
+      <button id="pickerHereBtn" class="modal-btn-primary">ここに決定</button>
+      <button id="pickerCancelBtn" class="modal-btn-secondary">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div id="settingsOverlay" class="modal-overlay hidden">
+  <div class="modal">
+    <p class="modal-message">設定</p>
+    <p id="syncStatusText" class="sync-status"></p>
+    <p id="uploadStatusText" class="sync-status"></p>
+    <div class="settings-actions">
+      <button id="signInBtn" class="modal-btn-secondary">Googleでサインイン</button>
+      <button id="signOutBtn" class="modal-btn-secondary hidden">サインアウト</button>
+      <button id="syncNowBtn" class="modal-btn-secondary">今すぐ同期</button>
+    </div>
+    <div class="settings-actions">
+      <button id="changePinBtn" class="modal-btn-secondary">PINコードを変更</button>
+      <button id="bioOnBtn" class="modal-btn-secondary hidden">👆 指紋でも解除できるようにする</button>
+      <button id="bioOffBtn" class="modal-btn-secondary hidden">指紋での解除をやめる</button>
+    </div>
+    <div class="modal-actions">
+      <button id="settingsCloseBtn" class="modal-btn-secondary">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
+<input id="pickInput" type="file" accept="image/*" multiple class="hidden">
+
+<script>
+  const STORAGE_KEY = 'photoAppData_v1';
+  const RECENT_KEY = 'photoAppRecentFolders_v1';
+  const VIEW_LRU_KEY = 'photoAppViewCache_v1';
+  const VIEW_CACHE_MAX = 200; // 端末内に置いておく表示用画像の上限枚数(古いものから消す)
+  const RECENT_MAX = 12;
+
+  const $ = (id) => document.getElementById(id);
+
+  const mainView = $('mainView');
+  const photoView = $('photoView');
+  const sortView = $('sortView');
+  const breadcrumbEl = $('breadcrumb');
+  const contentEl = $('content');
+  const backBtn = $('backBtn');
+  const homeBtn = $('homeBtn');
+  const actionbar = $('actionbar');
+  const newFolderBtn = $('newFolderBtn');
+  const selectbar = $('selectbar');
+  const lockView = $('lockView');
+  const modalOverlay = $('modalOverlay');
+  const pickerOverlay = $('pickerOverlay');
+  const settingsOverlay = $('settingsOverlay');
+  const syncStatusText = $('syncStatusText');
+  const uploadStatusText = $('uploadStatusText');
+  const signInBtn = $('signInBtn');
+  const signOutBtn = $('signOutBtn');
+
+  // ---------- データ ----------
+  // folders: { id: { id, name, parentId('root'か親フォルダのid), updatedAt, deleted? } }
+  // photos:  { id: { id, name, memo, takenAt, addedAt, folderId(nullなら未整理), mime, w, h,
+  //                  driveId, thumbDriveId, updatedAt, deleted?, driveTrashed? } }
+  function emptyData() {
+    return { version: 1, folders: {}, photos: {}, driveFolderId: null, driveThumbFolderId: null, updatedAt: 0 };
+  }
+
+  function loadData() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const d = JSON.parse(raw);
+        if (d && d.folders && d.photos) return d;
+      } catch (e) { /* fall through */ }
+    }
+    return emptyData();
+  }
+
+  let data = loadData();
+
+  function persistLocal() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  function saveData() {
+    data.updatedAt = Date.now();
+    persistLocal();
+    scheduleDriveSync();
+  }
+
+  function touch(rec) {
+    rec.updatedAt = Date.now();
+  }
+
+  function genId() {
+    return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  const ROOT = { id: 'root', name: 'ホーム' };
+
+  function getFolder(id) {
+    if (id === 'root') return ROOT;
+    const f = id && data.folders[id];
+    return f && !f.deleted ? f : null;
+  }
+
+  // 親が消えている(他の端末で削除された等)フォルダはホーム直下にあるものとして扱う
+  function parentOf(f) {
+    return getFolder(f.parentId) ? f.parentId : 'root';
+  }
+
+  // ホームから見た道筋(ホーム自身は含まない)。万一の循環にも備える
+  function folderPath(id) {
+    const chain = [];
+    const seen = new Set();
+    let f = getFolder(id);
+    while (f && f.id !== 'root' && !seen.has(f.id)) {
+      seen.add(f.id);
+      chain.unshift(f);
+      f = getFolder(parentOf(f));
+    }
+    if (f && f.id !== 'root') return chain.slice(-1); // 循環していたら自分だけ
+    return chain;
+  }
+
+  function folderLabel(id) {
+    if (!id) return '未整理';
+    return folderPath(id).map((f) => f.name).join(' › ') || 'ホーム';
+  }
+
+  function liveFolders() {
+    return Object.values(data.folders).filter((f) => !f.deleted);
+  }
+
+  function byName(a, b) {
+    return a.name.localeCompare(b.name, 'ja', { numeric: true });
+  }
+
+  function childFolders(parentId) {
+    return liveFolders().filter((f) => parentOf(f) === parentId && folderPath(f.id).length > 0).sort(byName);
+  }
+
+  function isInside(folderId, ancestorId) {
+    return folderPath(folderId).some((f) => f.id === ancestorId);
+  }
+
+  function livePhotos() {
+    return Object.values(data.photos).filter((p) => !p.deleted);
+  }
+
+  // 入っているフォルダが消えている写真は「未整理」に戻ったものとして扱う
+  function photoFolder(p) {
+    return p.folderId && getFolder(p.folderId) && p.folderId !== 'root' ? p.folderId : null;
+  }
+
+  const newestFirst = (a, b) => (b.takenAt || 0) - (a.takenAt || 0);
+
+  function photosIn(folderId) {
+    return livePhotos().filter((p) => photoFolder(p) === folderId).sort(newestFirst);
+  }
+
+  function unsortedPhotos() {
+    return photosIn(null);
+  }
+
+  function countDeep(folderId) {
+    let n = 0;
+    livePhotos().forEach((p) => {
+      const fid = photoFolder(p);
+      if (fid && (fid === folderId || isInside(fid, folderId))) n++;
+    });
+    return n;
+  }
+
+  // ---------- 最近使ったフォルダ ----------
+  function getRecent() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+      return arr.filter((id) => getFolder(id) && id !== 'root');
+    } catch (e) { return []; }
+  }
+
+  function addRecent(id) {
+    if (!id || id === 'root') return;
+    const arr = getRecent().filter((x) => x !== id);
+    arr.unshift(id);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(arr.slice(0, RECENT_MAX)));
+  }
+
+  // ---------- 小物 ----------
+  const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  function ymd(ts) {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+
+  function hm(ts) {
+    const d = new Date(ts);
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  function formatDateTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}(${WEEK[d.getDay()]}) ${hm(ts)}`;
+  }
+
+  function formatDay(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return `${y}年${m}月${d}日(${WEEK[dt.getDay()]})`;
+  }
+
+  function defaultName(ts) {
+    const d = new Date(ts);
+    return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${hm(ts)}`;
+  }
+
+  function parseYmd(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+
+  // ひらがな・カタカナ・大文字小文字の違いを無視して検索するため
+  function normalizeForSearch(s) {
+    return (s || '').toLowerCase().replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  }
+
+  let toastTimer = null;
+  function showToast(msg, ms) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), ms || 2200);
+  }
+
+  // ---------- 端末内の画像置き場(IndexedDB) ----------
+  // thumbs: 一覧用の小さい画像 / views: 表示用に縮めた画像(上限あり) / pending: Driveへのアップロード待ちの元画像
+  let dbPromise = null;
+  function openDb() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open('photoAppDB', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          ['thumbs', 'views', 'pending'].forEach((s) => { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s); });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    return dbPromise;
+  }
+
+  async function idbReq(store, mode, fn) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(store, mode);
+      const req = fn(tx.objectStore(store));
+      tx.oncomplete = () => resolve(req ? req.result : undefined);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+  const idbGet = (store, key) => idbReq(store, 'readonly', (s) => s.get(key)).catch(() => undefined);
+  const idbPut = (store, key, val) => idbReq(store, 'readwrite', (s) => s.put(val, key));
+  const idbDel = (store, key) => idbReq(store, 'readwrite', (s) => s.delete(key)).catch(() => {});
+  const idbKeys = (store) => idbReq(store, 'readonly', (s) => s.getAllKeys()).catch(() => []);
+
+  function getLru() {
+    try { return JSON.parse(localStorage.getItem(VIEW_LRU_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function addLru(id) {
+    const arr = getLru().filter((x) => x !== id);
+    arr.push(id);
+    while (arr.length > VIEW_CACHE_MAX) idbDel('views', arr.shift());
+    localStorage.setItem(VIEW_LRU_KEY, JSON.stringify(arr));
+  }
+
+  async function purgeLocalPhoto(id) {
+    await idbDel('thumbs', id);
+    await idbDel('views', id);
+    await idbDel('pending', id);
+    const url = thumbUrls.get(id);
+    if (url) { URL.revokeObjectURL(url); thumbUrls.delete(id); }
+  }
+
+  // ---------- 画像の加工 ----------
+  async function decodeImage(blob) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return img;
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+  }
+
+  function drawScaled(img, maxSide, quality) {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const s = Math.min(1, maxSide / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * s));
+    c.height = Math.max(1, Math.round(h * s));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob'))), 'image/jpeg', quality));
+  }
+
+  // 1回の読み込みで、一覧用(小)と表示用(中)の2種類を作る
+  async function makeVariants(blob, wantThumb) {
+    const img = await decodeImage(blob);
+    const view = await drawScaled(img, 2048, 0.85);
+    const thumb = wantThumb ? await drawScaled(img, 360, 0.75) : null;
+    return { view, thumb, w: img.naturalWidth, h: img.naturalHeight };
+  }
+
+  // JPEGのExif情報から撮影日時を読む(読めなければnull)
+  async function readExifDate(file) {
+    try {
+      const buf = await file.slice(0, 256 * 1024).arrayBuffer();
+      const v = new DataView(buf);
+      if (v.getUint16(0) !== 0xFFD8) return null;
+      let off = 2;
+      while (off + 4 < v.byteLength) {
+        const marker = v.getUint16(off);
+        if ((marker & 0xFF00) !== 0xFF00) break;
+        const len = v.getUint16(off + 2);
+        if (marker === 0xFFE1 && v.getUint32(off + 4) === 0x45786966) return parseTiffDate(v, off + 10);
+        if (marker === 0xFFDA) break;
+        off += 2 + len;
+      }
+    } catch (e) { /* 読めなければ他の方法で日付を決める */ }
+    return null;
+  }
+
+  function parseTiffDate(v, t) {
+    const le = v.getUint16(t) === 0x4949;
+    const u16 = (o) => v.getUint16(o, le);
+    const u32 = (o) => v.getUint32(o, le);
+    const readIfd = (ifdOff) => {
+      const out = {};
+      const n = u16(t + ifdOff);
+      for (let i = 0; i < n; i++) {
+        const e = t + ifdOff + 2 + i * 12;
+        const tag = u16(e);
+        const type = u16(e + 2);
+        const cnt = u32(e + 4);
+        if (tag === 0x8769) out.exif = u32(e + 8);
+        else if ((tag === 0x9003 || tag === 0x9004 || tag === 0x0132) && type === 2) {
+          const vo = cnt > 4 ? t + u32(e + 8) : e + 8;
+          let s = '';
+          for (let k = 0; k < cnt - 1 && vo + k < v.byteLength; k++) s += String.fromCharCode(v.getUint8(vo + k));
+          out[tag] = s;
+        }
+      }
+      return out;
+    };
+    const ifd0 = readIfd(u32(t + 4));
+    let s = null;
+    if (ifd0.exif) {
+      const ex = readIfd(ifd0.exif);
+      s = ex[0x9003] || ex[0x9004];
+    }
+    s = s || ifd0[0x0132];
+    const m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(s || '');
+    if (!m || m[1] === '0000') return null;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  // ---------- 写真の取り込み ----------
+  let importing = false;
+
+  async function addFiles(files, folderId, fromCamera) {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    importing = true;
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < list.length; i++) {
+      const file = list[i];
+      if (list.length > 1) showToast(`取り込み中… ${i + 1} / ${list.length}`, 60000);
+      else showToast('取り込み中…', 60000);
+      try {
+        const now = Date.now();
+        let taken = await readExifDate(file);
+        if (!taken) taken = fromCamera ? now : (file.lastModified || now);
+        const v = await makeVariants(file, true);
+        const id = genId();
+        await idbPut('pending', id, file);
+        await idbPut('thumbs', id, v.thumb);
+        await idbPut('views', id, v.view);
+        addLru(id);
+        data.photos[id] = {
+          id, name: defaultName(taken), memo: '', takenAt: taken, addedAt: now + i,
+          folderId: folderId || null, mime: file.type || 'image/jpeg', w: v.w, h: v.h,
+          driveId: null, thumbDriveId: null, updatedAt: now
+        };
+        ok++;
+      } catch (e) {
+        failed++;
+      }
+    }
+    importing = false;
+    if (ok) {
+      if (folderId) addRecent(folderId);
+      saveData();
+    }
+    let msg = ok ? `${ok}枚を「${folderLabel(folderId)}」に入れました` : '';
+    if (failed) msg += (msg ? '。' : '') + `${failed}枚は読み込めませんでした`;
+    showToast(msg || '写真がありませんでした', 2600);
+    refreshCurrentView();
+    processUploads();
+  }
+
+  function currentAddTarget() {
+    const v = topView();
+    return v.type === 'folder' ? v.id : null;
+  }
+
+  $('cameraBtn').addEventListener('click', () => $('cameraInput').click());
+  $('pickBtn').addEventListener('click', () => $('pickInput').click());
+  $('cameraInput').addEventListener('change', (e) => {
+    const files = e.target.files;
+    addFiles(files, currentAddTarget(), true).finally(() => { e.target.value = ''; });
+  });
+  $('pickInput').addEventListener('change', (e) => {
+    const files = e.target.files;
+    addFiles(files, currentAddTarget(), false).finally(() => { e.target.value = ''; });
+  });
+
+  // ---------- 画像の表示 ----------
+  const thumbUrls = new Map();
+  const thumbQueue = [];
+  const thumbQueued = new Set();
+  const thumbFailed = new Set();
+  let thumbActive = 0;
+
+  function setThumbOnTiles(id, url) {
+    document.querySelectorAll(`img[data-thumb-id="${id}"]`).forEach((img) => { img.src = url; });
+  }
+
+  async function fillThumb(img, p) {
+    let url = thumbUrls.get(p.id);
+    if (!url) {
+      const b = await idbGet('thumbs', p.id);
+      if (b) {
+        url = thumbUrls.get(p.id) || URL.createObjectURL(b);
+        thumbUrls.set(p.id, url);
+      }
+    }
+    if (url) img.src = url;
+    else requestThumbDownload(p);
+  }
+
+  function requestThumbDownload(p) {
+    if (!accessToken || !p.thumbDriveId || thumbQueued.has(p.id) || thumbFailed.has(p.id)) return;
+    thumbQueued.add(p.id);
+    thumbQueue.push(p.id);
+    pumpThumbs();
+  }
+
+  function pumpThumbs() {
+    while (thumbActive < 3 && thumbQueue.length) {
+      const id = thumbQueue.shift();
+      thumbActive++;
+      (async () => {
+        try {
+          const p = data.photos[id];
+          if (!p || p.deleted || !p.thumbDriveId) return;
+          const res = await driveApiFetch(`/drive/v3/files/${p.thumbDriveId}?alt=media`);
+          if (!res.ok) { thumbFailed.add(id); return; }
+          const b = await res.blob();
+          await idbPut('thumbs', id, b);
+          const url = URL.createObjectURL(b);
+          thumbUrls.set(id, url);
+          setThumbOnTiles(id, url);
+        } catch (e) {
+          thumbFailed.add(id);
+        } finally {
+          thumbActive--;
+          thumbQueued.delete(id);
+          pumpThumbs();
+        }
+      })();
+    }
+  }
+
+  // 大きく表示するための画像(端末内にあればそれを、無ければDriveから元画像を取ってくる)
+  const viewLoading = new Map();
+  function getViewBlob(p) {
+    if (viewLoading.has(p.id)) return viewLoading.get(p.id);
+    const pr = (async () => {
+      const cached = await idbGet('views', p.id);
+      if (cached) { addLru(p.id); return cached; }
+      const pend = await idbGet('pending', p.id);
+      if (pend) return pend;
+      const cur = data.photos[p.id] || p;
+      if (!cur.driveId || !accessToken) return null;
+      const res = await driveApiFetch(`/drive/v3/files/${cur.driveId}?alt=media`);
+      if (!res.ok) return null;
+      const orig = await res.blob();
+      try {
+        const v = await makeVariants(orig, false);
+        await idbPut('views', p.id, v.view);
+        addLru(p.id);
+        return v.view;
+      } catch (e) {
+        return orig;
+      }
+    })().catch(() => null).finally(() => viewLoading.delete(p.id));
+    viewLoading.set(p.id, pr);
+    return pr;
+  }
+
+  // 1枚の<img>に、まず小さい画像→続いて大きい画像を出す
+  async function showLargeImage(img, p, isStillCurrent, loadingEl) {
+    if (img.dataset.url) { URL.revokeObjectURL(img.dataset.url); delete img.dataset.url; }
+    img.removeAttribute('src');
+    const t = thumbUrls.get(p.id) || null;
+    if (t) img.src = t;
+    else {
+      const tb = await idbGet('thumbs', p.id);
+      if (tb && isStillCurrent()) {
+        const u = URL.createObjectURL(tb);
+        thumbUrls.set(p.id, u);
+        img.src = u;
+      }
+    }
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    const blob = await getViewBlob(p);
+    if (loadingEl && isStillCurrent()) loadingEl.classList.add('hidden');
+    if (!isStillCurrent()) return;
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      img.dataset.url = url;
+      img.src = url;
+    } else if (loadingEl) {
+      loadingEl.textContent = accessToken ? 'まだ別の端末からアップロードされていません' : 'Googleにサインインすると表示できます';
+      loadingEl.classList.remove('hidden');
+    }
+  }
+
+  // ---------- 画面の切り替え(戻るボタン対応) ----------
+  let views = [{ type: 'home' }];
+  const topView = () => views[views.length - 1];
+
+  function pushView(v) {
+    exitSelect(true);
+    views.push(v);
+    render();
+  }
+
+  function popView() {
+    if (views.length <= 1) return;
+    exitSelect(true);
+    views.pop();
+    render();
+  }
+
+  function goHome() {
+    exitSelect(true);
+    views = [{ type: 'home' }];
+    render();
+  }
+
+  function goToFolder(id) {
+    exitSelect(true);
+    if (id === 'root') { goHome(); return; }
+    const idx = views.findIndex((v) => v.type === 'folder' && v.id === id);
+    if (idx !== -1) views = views.slice(0, idx + 1);
+    else views = [{ type: 'home' }].concat(folderPath(id).map((f) => ({ type: 'folder', id: f.id })));
+    render();
+  }
+
+  function showOnly(el) {
+    [mainView, photoView, sortView].forEach((v) => v.classList.toggle('hidden', v !== el));
+  }
+
+  function render() {
+    const v = topView();
+    if (v.type === 'photo') { showOnly(photoView); renderPhotoView(); }
+    else if (v.type === 'sort') { showOnly(sortView); renderSortView(); }
+    else { showOnly(mainView); renderMain(); }
+    ensureTrap();
+  }
+
+  // 同期などでデータが変わったとき、入力中の内容を邪魔しないように画面を更新する
+  function refreshCurrentView() {
+    const v = topView();
+    if (v.type === 'photo') {
+      const p = data.photos[v.id];
+      if (!p || p.deleted) popView();
+      else renderPhotoPlace();
+    } else if (v.type === 'sort') {
+      renderSortView(true);
+    } else if (v.type === 'search') {
+      renderSearchResults();
+    } else {
+      if (v.type === 'folder' && !getFolder(v.id)) { goHome(); return; }
+      renderMain();
+    }
+  }
+
+  // Androidの戻るボタン/戻るジェスチャーで、アプリを閉じずに一つ前の画面へ戻る
+  let trapped = false;
+  function anyOverlayOpen() {
+    return !modalOverlay.classList.contains('hidden') || !pickerOverlay.classList.contains('hidden') ||
+      !settingsOverlay.classList.contains('hidden') || $('photoStage').classList.contains('zoomed');
+  }
+  function ensureTrap() {
+    if (!trapped && (views.length > 1 || selecting || anyOverlayOpen())) {
+      history.pushState({ photoAppTrap: 1 }, '');
+      trapped = true;
+    }
+  }
+  window.addEventListener('popstate', () => {
+    trapped = false;
+    appBack();
+    ensureTrap();
+  });
+
+  function appBack() {
+    if (!lockView.classList.contains('hidden')) return;
+    if (!modalOverlay.classList.contains('hidden')) { $('modalCancel').click(); return; }
+    if (!pickerOverlay.classList.contains('hidden')) { closePicker(); return; }
+    if (!settingsOverlay.classList.contains('hidden')) { settingsOverlay.classList.add('hidden'); return; }
+    if ($('photoStage').classList.contains('zoomed')) { $('photoStage').classList.remove('zoomed'); return; }
+    if (selecting) { exitSelect(); return; }
+    popView();
+  }
+
+  backBtn.addEventListener('click', popView);
+  homeBtn.addEventListener('click', goHome);
+  $('dateSearchBtn').addEventListener('click', () => {
+    if (topView().type === 'search') return;
+    const today = ymd(Date.now());
+    pushView({ type: 'search', from: today, to: '', basis: 'taken' });
+  });
+
+  // ---------- モーダル(名前入力・確認) ----------
+  let modalCallback = null;
+
+  function showPrompt(message, defaultValue, onOk) {
+    $('modalMessage').textContent = message;
+    $('modalSub').classList.add('hidden');
+    $('modalInput').classList.remove('hidden');
+    $('modalInput').value = defaultValue || '';
+    $('modalOk').className = 'modal-btn-primary';
+    $('modalOk').textContent = 'OK';
+    modalOverlay.classList.remove('hidden');
+    $('modalInput').focus();
+    modalCallback = (ok) => { if (ok) onOk($('modalInput').value.trim()); };
+    ensureTrap();
+  }
+
+  function showConfirm(message, sub, okLabel, onOk) {
+    $('modalMessage').textContent = message;
+    $('modalSub').textContent = sub || '';
+    $('modalSub').classList.toggle('hidden', !sub);
+    $('modalInput').classList.add('hidden');
+    $('modalOk').className = 'modal-btn-danger';
+    $('modalOk').textContent = okLabel || '削除';
+    modalOverlay.classList.remove('hidden');
+    modalCallback = (ok) => { if (ok) onOk(); };
+    ensureTrap();
+  }
+
+  function hideModal() {
+    modalOverlay.classList.add('hidden');
+    modalCallback = null;
+  }
+
+  $('modalOk').addEventListener('click', () => { const cb = modalCallback; hideModal(); if (cb) cb(true); });
+  $('modalCancel').addEventListener('click', () => { const cb = modalCallback; hideModal(); if (cb) cb(false); });
+  $('modalInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { const cb = modalCallback; hideModal(); if (cb) cb(true); }
+  });
+
+  // ---------- フォルダの操作 ----------
+  function createFolder(parentId, onCreated) {
+    showPrompt('新しいフォルダの名前', '', (name) => {
+      if (!name) return;
+      const f = { id: genId(), name, parentId: parentId || 'root', updatedAt: Date.now() };
+      data.folders[f.id] = f;
+      saveData();
+      if (onCreated) onCreated(f);
+      else refreshCurrentView();
+    });
+  }
+
+  function renameFolder(f) {
+    showPrompt('フォルダの名前を変更', f.name, (name) => {
+      if (!name) return;
+      f.name = name;
+      touch(f);
+      saveData();
+      refreshCurrentView();
+    });
+  }
+
+  function moveFolder(f, destId) {
+    if (destId === f.id || (destId !== 'root' && isInside(destId, f.id))) return;
+    if (parentOf(f) === destId) return;
+    f.parentId = destId;
+    touch(f);
+    if (destId !== 'root') addRecent(destId);
+    saveData();
+    showToast(`「${f.name}」を「${folderLabel(destId)}」に移動しました`);
+    refreshCurrentView();
+  }
+
+  function deleteFolder(f) {
+    const n = countDeep(f.id);
+    const subs = liveFolders().filter((x) => isInside(x.id, f.id) && x.id !== f.id);
+    const sub = n ? `中の写真${n}枚は削除されず「未整理」に戻ります。` : (subs.length ? '中のフォルダも削除されます。' : '');
+    showConfirm(`「${f.name}」フォルダを削除しますか？`, sub, '削除', () => {
+      const now = Date.now();
+      const ids = new Set([f.id].concat(subs.map((x) => x.id)));
+      livePhotos().forEach((p) => {
+        if (p.folderId && ids.has(p.folderId)) { p.folderId = null; p.updatedAt = now; }
+      });
+      ids.forEach((id) => { const x = data.folders[id]; x.deleted = true; x.updatedAt = now; });
+      saveData();
+      refreshCurrentView();
+    });
+  }
+
+  newFolderBtn.addEventListener('click', () => {
+    const v = topView();
+    createFolder(v.type === 'folder' ? v.id : 'root');
+  });
+
+  // ---------- 写真の操作 ----------
+  function movePhotos(ids, destId) {
+    const now = Date.now();
+    let n = 0;
+    ids.forEach((id) => {
+      const p = data.photos[id];
+      if (!p || p.deleted) return;
+      if (photoFolder(p) === destId) return;
+      p.folderId = destId;
+      p.updatedAt = now;
+      n++;
+    });
+    if (destId) addRecent(destId);
+    saveData();
+    showToast(`${n}枚を「${folderLabel(destId)}」に移動しました`);
+  }
+
+  function deletePhotos(ids) {
+    const now = Date.now();
+    ids.forEach((id) => {
+      const p = data.photos[id];
+      if (!p || p.deleted) return;
+      // 削除した写真は印だけ残し、他の端末にも削除を伝える。Drive上のファイルはゴミ箱へ(30日間は戻せる)
+      data.photos[id] = { id, deleted: true, updatedAt: now, driveId: p.driveId || null, thumbDriveId: p.thumbDriveId || null };
+      purgeLocalPhoto(id);
+    });
+    saveData();
+    processUploads();
+  }
+
+  // ---------- 一覧画面 ----------
+  let selecting = false;
+  let selected = new Set();
+  let gridIds = []; // いま一覧に出ている写真(表示順)
+
+  function renderBreadcrumb() {
+    const v = topView();
+    breadcrumbEl.innerHTML = '';
+    const crumbs = [];
+    if (v.type === 'home') crumbs.push({ name: '写真整理' });
+    else {
+      crumbs.push({ name: 'ホーム', go: goHome });
+      if (v.type === 'folder') {
+        const p = folderPath(v.id);
+        p.forEach((f, i) => crumbs.push({ name: f.name, go: i < p.length - 1 ? () => goToFolder(f.id) : null }));
+      } else if (v.type === 'unsorted') crumbs.push({ name: '未整理' });
+      else if (v.type === 'search') crumbs.push({ name: '日付で探す' });
+    }
+    crumbs.forEach((c, i) => {
+      if (i > 0) {
+        const sep = document.createElement('span');
+        sep.className = 'crumb-sep';
+        sep.textContent = '›';
+        breadcrumbEl.appendChild(sep);
+      }
+      const el = document.createElement('span');
+      const isCurrent = i === crumbs.length - 1;
+      el.className = 'crumb' + (isCurrent ? ' crumb-current' : '');
+      el.textContent = c.name;
+      if (!isCurrent && c.go) el.addEventListener('click', c.go);
+      breadcrumbEl.appendChild(el);
+    });
+  }
+
+  function renderMain() {
+    const v = topView();
+    renderBreadcrumb();
+    backBtn.classList.toggle('hidden', views.length <= 1);
+    actionbar.classList.toggle('hidden', selecting || v.type === 'search');
+    newFolderBtn.classList.toggle('hidden', v.type === 'unsorted');
+    selectbar.classList.toggle('hidden', !selecting);
+    updateSelectBar();
+
+    const scrollTop = contentEl.scrollTop;
+    contentEl.innerHTML = '';
+    contentEl.classList.toggle('selecting', selecting);
+    gridIds = [];
+
+    if (v.type === 'home') {
+      contentEl.appendChild(buildUnsortedCard());
+      renderFolderSection('root');
+    } else if (v.type === 'folder') {
+      renderFolderSection(v.id);
+      const photos = photosIn(v.id);
+      contentEl.appendChild(buildPhotoSection(`写真 ${photos.length}枚`, photos, false));
+      if (!photos.length) {
+        const p = document.createElement('p');
+        p.className = 'empty';
+        p.textContent = 'このフォルダを開いたまま「📷 撮影」すると、ここに直接入ります';
+        contentEl.appendChild(p);
+      }
+    } else if (v.type === 'unsorted') {
+      const photos = unsortedPhotos();
+      if (photos.length) {
+        const bar = document.createElement('div');
+        bar.className = 'unsorted-actions';
+        const sortBtn = document.createElement('button');
+        sortBtn.className = 'btn-primary';
+        sortBtn.textContent = '▶ 振り分けモード';
+        sortBtn.addEventListener('click', startSort);
+        bar.appendChild(sortBtn);
+        contentEl.appendChild(bar);
+      }
+      contentEl.appendChild(buildPhotoSection(`未整理 ${photos.length}枚`, photos, false));
+      if (!photos.length) {
+        const p = document.createElement('p');
+        p.className = 'empty';
+        p.textContent = '未整理の写真はありません ✨';
+        contentEl.appendChild(p);
+      }
+    } else if (v.type === 'search') {
+      renderSearch();
+    }
+    contentEl.scrollTop = scrollTop;
+  }
+
+  function buildUnsortedCard() {
+    const n = unsortedPhotos().length;
+    const card = document.createElement('div');
+    card.className = 'unsorted-card' + (n ? '' : ' done');
+    const top = document.createElement('div');
+    top.className = 'unsorted-top';
+    const label = document.createElement('span');
+    label.className = 'unsorted-label';
+    label.textContent = n ? '📥 未整理の写真' : '📥 未整理の写真はありません';
+    top.appendChild(label);
+    if (n) {
+      const num = document.createElement('span');
+      num.className = 'unsorted-num';
+      num.textContent = n;
+      const unit = document.createElement('span');
+      unit.textContent = '枚';
+      top.append(num, unit);
+    }
+    top.addEventListener('click', () => pushView({ type: 'unsorted' }));
+    card.appendChild(top);
+    if (n) {
+      const acts = document.createElement('div');
+      acts.className = 'unsorted-actions';
+      const a = document.createElement('button');
+      a.className = 'btn-primary';
+      a.textContent = '▶ 振り分けモード';
+      a.addEventListener('click', startSort);
+      const b = document.createElement('button');
+      b.className = 'btn-soft';
+      b.textContent = '☑ 選んでまとめて移動';
+      b.addEventListener('click', () => { pushView({ type: 'unsorted' }); enterSelect(); });
+      acts.append(a, b);
+      card.appendChild(acts);
+    }
+    const status = document.createElement('div');
+    status.className = 'status-line hidden';
+    status.id = 'homeUploadStatus';
+    card.appendChild(status);
+    updateUploadStatus();
+    return card;
+  }
+
+  function renderFolderSection(parentId) {
+    const folders = childFolders(parentId);
+    const head = document.createElement('div');
+    head.className = 'section-head';
+    head.textContent = `フォルダ ${folders.length}`;
+    contentEl.appendChild(head);
+    if (!folders.length && parentId === 'root') {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'フォルダはまだありません。「＋ フォルダ」で作れます';
+      contentEl.appendChild(p);
+    }
+    folders.forEach((f) => contentEl.appendChild(buildFolderRow(f)));
+  }
+
+  function buildFolderRow(f) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const main = document.createElement('div');
+    main.className = 'row-main';
+    const icon = document.createElement('span');
+    icon.className = 'row-icon';
+    icon.textContent = '📁';
+    const text = document.createElement('div');
+    text.className = 'row-text';
+    const name = document.createElement('span');
+    name.className = 'row-name';
+    name.textContent = f.name;
+    const meta = document.createElement('span');
+    meta.className = 'row-meta';
+    const direct = photosIn(f.id).length;
+    const deep = countDeep(f.id);
+    const subs = childFolders(f.id).length;
+    meta.textContent = `写真 ${direct}枚` + (subs ? `・フォルダ ${subs}` : '') + (deep !== direct ? `(中も含めて${deep}枚)` : '');
+    text.append(name, meta);
+    main.append(icon, text);
+    main.addEventListener('click', () => pushView({ type: 'folder', id: f.id }));
+
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    const mk = (label, aria, fn) => {
+      const b = document.createElement('button');
+      b.className = 'icon-btn';
+      b.textContent = label;
+      b.setAttribute('aria-label', aria);
+      b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+      return b;
+    };
+    actions.append(
+      mk('📂', 'フォルダごと移動', () => openPicker({
+        title: `「${f.name}」の移動先`, mode: 'folder', movingFolderId: f.id,
+        onPick: (dest) => moveFolder(f, dest)
+      })),
+      mk('✏️', '名前を変更', () => renameFolder(f)),
+      mk('🗑️', '削除', () => deleteFolder(f))
+    );
+    row.append(main, actions);
+    return row;
+  }
+
+  function buildPhotoSection(title, photos, showFolder) {
+    const wrap = document.createElement('div');
+    if (title) {
+      const head = document.createElement('div');
+      head.className = 'section-head';
+      const t = document.createElement('span');
+      t.textContent = title;
+      head.appendChild(t);
+      if (photos.length && !selecting) {
+        const b = document.createElement('button');
+        b.className = 'small-btn';
+        b.textContent = '☑ 選択';
+        b.addEventListener('click', enterSelect);
+        head.appendChild(b);
+      }
+      wrap.appendChild(head);
+    }
+    wrap.appendChild(buildGrid(photos, showFolder));
+    return wrap;
+  }
+
+  function buildGrid(photos, showFolder) {
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    photos.forEach((p) => {
+      gridIds.push(p.id);
+      grid.appendChild(buildTile(p, showFolder));
+    });
+    return grid;
+  }
+
+  function buildTile(p, showFolder) {
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (selected.has(p.id) ? ' selected' : '');
+    tile.dataset.id = p.id;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.dataset.thumbId = p.id;
+    tile.appendChild(img);
+    fillThumb(img, p);
+    if (!p.driveId) {
+      const badge = document.createElement('span');
+      badge.className = 'tile-badge';
+      badge.textContent = '⏳';
+      badge.title = 'アップロード待ち';
+      tile.appendChild(badge);
+    }
+    const label = document.createElement('span');
+    label.className = 'tile-label';
+    label.textContent = showFolder ? folderLabel(photoFolder(p)) : p.name;
+    tile.appendChild(label);
+    const check = document.createElement('span');
+    check.className = 'tile-check';
+    check.textContent = '✓';
+    tile.appendChild(check);
+
+    // 長押しで選択を始める
+    let pressTimer = null;
+    let longPressed = false;
+    tile.addEventListener('pointerdown', () => {
+      longPressed = false;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => {
+        longPressed = true;
+        if (!selecting) enterSelect();
+        toggleSelect(p.id);
+        if (navigator.vibrate) navigator.vibrate(20);
+      }, 500);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => tile.addEventListener(ev, () => clearTimeout(pressTimer)));
+    tile.addEventListener('contextmenu', (e) => e.preventDefault());
+    tile.addEventListener('click', () => {
+      if (longPressed) { longPressed = false; return; }
+      if (selecting) toggleSelect(p.id);
+      else pushView({ type: 'photo', id: p.id, list: gridIds.slice() });
+    });
+    return tile;
+  }
+
+  // ---------- 複数選択 ----------
+  function enterSelect() {
+    selecting = true;
+    selected = new Set();
+    renderMain();
+    ensureTrap();
+  }
+
+  function exitSelect(silent) {
+    if (!selecting) return;
+    selecting = false;
+    selected = new Set();
+    if (!silent) renderMain();
+  }
+
+  function toggleSelect(id) {
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    const tile = contentEl.querySelector(`.tile[data-id="${id}"]`);
+    if (tile) tile.classList.toggle('selected', selected.has(id));
+    updateSelectBar();
+  }
+
+  function updateSelectBar() {
+    $('selCount').textContent = `${selected.size}枚 選択中`;
+    $('selMoveBtn').disabled = !selected.size;
+    $('selDeleteBtn').disabled = !selected.size;
+  }
+
+  $('selCancelBtn').addEventListener('click', () => exitSelect());
+  $('selAllBtn').addEventListener('click', () => {
+    const all = gridIds.length && gridIds.every((id) => selected.has(id));
+    selected = all ? new Set() : new Set(gridIds);
+    contentEl.querySelectorAll('.tile').forEach((t) => t.classList.toggle('selected', selected.has(t.dataset.id)));
+    updateSelectBar();
+  });
+  $('selMoveBtn').addEventListener('click', () => {
+    if (!selected.size) return;
+    const ids = Array.from(selected);
+    openPicker({
+      title: `${ids.length}枚の移動先`, mode: 'photos', allowUnsorted: true,
+      onPick: (dest) => { movePhotos(ids, dest); exitSelect(); refreshCurrentView(); }
+    });
+  });
+  $('selDeleteBtn').addEventListener('click', () => {
+    if (!selected.size) return;
+    const ids = Array.from(selected);
+    showConfirm(`${ids.length}枚の写真を削除しますか？`, 'Googleドライブ上の写真はゴミ箱に移ります(30日以内なら戻せます)。', '削除', () => {
+      deletePhotos(ids);
+      exitSelect();
+      refreshCurrentView();
+    });
+  });
+
+  // ---------- 日付で探す ----------
+  function renderSearch() {
+    const v = topView();
+    const box = document.createElement('div');
+    box.className = 'search-box';
+
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    [['taken', '撮影日'], ['added', 'アプリに入れた日']].forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = v.basis === key ? 'on' : '';
+      b.addEventListener('click', () => { v.basis = key; seg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); renderSearchResults(); });
+      seg.appendChild(b);
+    });
+
+    const row = document.createElement('div');
+    row.className = 'date-row';
+    const from = document.createElement('input');
+    from.type = 'date';
+    from.value = v.from || '';
+    const tilde = document.createElement('span');
+    tilde.textContent = '〜';
+    const to = document.createElement('input');
+    to.type = 'date';
+    to.value = v.to || '';
+    const onChange = () => { v.from = from.value; v.to = to.value; renderSearchResults(); };
+    from.addEventListener('change', onChange);
+    to.addEventListener('change', onChange);
+    row.append(from, tilde, to);
+
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = '右側を空にすると、左の1日だけを表示します';
+
+    const quick = document.createElement('div');
+    quick.className = 'quick-row';
+    const now = new Date();
+    const setRange = (a, b) => { from.value = ymd(a); to.value = b ? ymd(b) : ''; onChange(); };
+    [
+      ['今日', () => setRange(now)],
+      ['昨日', () => setRange(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))],
+      ['この7日', () => setRange(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6), now)],
+      ['今月', () => setRange(new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth() + 1, 0))],
+      ['先月', () => setRange(new Date(now.getFullYear(), now.getMonth() - 1, 1), new Date(now.getFullYear(), now.getMonth(), 0))],
+      ['1年前の今日', () => setRange(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()))]
+    ].forEach(([label, fn]) => {
+      const b = document.createElement('button');
+      b.className = 'small-btn';
+      b.textContent = label;
+      b.addEventListener('click', fn);
+      quick.appendChild(b);
+    });
+
+    box.append(seg, row, hint, quick);
+    contentEl.appendChild(box);
+    const results = document.createElement('div');
+    results.id = 'searchResults';
+    contentEl.appendChild(results);
+    renderSearchResults();
+  }
+
+  function renderSearchResults() {
+    const v = topView();
+    const results = $('searchResults');
+    if (!results || v.type !== 'search') return;
+    results.innerHTML = '';
+    gridIds = [];
+    let a = parseYmd(v.from);
+    let b = parseYmd(v.to) || a;
+    if (!a && b) a = b;
+    if (!a) {
+      results.innerHTML = '<p class="empty">日付を選んでください</p>';
+      return;
+    }
+    if (b < a) [a, b] = [b, a];
+    const start = a.getTime();
+    const end = new Date(b.getFullYear(), b.getMonth(), b.getDate() + 1).getTime();
+    const key = v.basis === 'added' ? 'addedAt' : 'takenAt';
+    const hits = livePhotos().filter((p) => p[key] >= start && p[key] < end).sort((x, y) => y[key] - x[key]);
+
+    const head = document.createElement('div');
+    head.className = 'section-head';
+    const t = document.createElement('span');
+    t.textContent = `${hits.length}枚 見つかりました(全フォルダから)`;
+    head.appendChild(t);
+    if (hits.length && !selecting) {
+      const sb = document.createElement('button');
+      sb.className = 'small-btn';
+      sb.textContent = '☑ 選択';
+      sb.addEventListener('click', enterSelect);
+      head.appendChild(sb);
+    }
+    results.appendChild(head);
+    if (!hits.length) {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = '該当する写真はありません';
+      results.appendChild(p);
+      return;
+    }
+    const groups = new Map();
+    hits.forEach((p) => {
+      const k = ymd(p[key]);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(p);
+    });
+    groups.forEach((list, k) => {
+      const dh = document.createElement('div');
+      dh.className = 'day-head';
+      dh.textContent = `${formatDay(k)}  ${list.length}枚`;
+      results.appendChild(dh);
+      results.appendChild(buildGrid(list, true));
+    });
+  }
+
+  // ---------- 写真の詳細 ----------
+  const photoImg = $('photoImg');
+  const photoStage = $('photoStage');
+  let photoSaveTimer = null;
+
+  function currentPhoto() {
+    const v = topView();
+    if (v.type !== 'photo') return null;
+    const p = data.photos[v.id];
+    return p && !p.deleted ? p : null;
+  }
+
+  function photoList() {
+    const v = topView();
+    return (v.list || [v.id]).filter((id) => data.photos[id] && !data.photos[id].deleted);
+  }
+
+  function renderPhotoView() {
+    const v = topView();
+    const p = currentPhoto();
+    if (!p) { popView(); return; }
+    photoStage.classList.remove('zoomed');
+    $('photoTitle').textContent = p.name;
+    const list = photoList();
+    const idx = list.indexOf(p.id);
+    $('photoPos').textContent = list.length > 1 ? `${idx + 1} / ${list.length}` : '';
+    $('photoPrevBtn').classList.toggle('hidden', idx <= 0);
+    $('photoNextBtn').classList.toggle('hidden', idx === -1 || idx >= list.length - 1);
+    $('photoName').value = p.name;
+    $('photoMemo').value = p.memo || '';
+    $('photoDate').value = ymd(p.takenAt);
+    $('photoTime').value = hm(p.takenAt);
+    renderPhotoPlace();
+    const loading = $('photoLoading');
+    loading.textContent = '読み込み中…';
+    showLargeImage(photoImg, p, () => topView() === v && v.id === p.id, loading);
+  }
+
+  function renderPhotoPlace() {
+    const p = currentPhoto();
+    if (!p) return;
+    const fid = photoFolder(p);
+    $('photoPlace').textContent = fid ? '📁 ' + folderLabel(fid) : '📥 未整理';
+    $('photoMeta').innerHTML = '';
+    const lines = [`アプリに入れた日: ${formatDateTime(p.addedAt)}`];
+    if (p.w && p.h) lines.push(`大きさ: ${p.w} × ${p.h}`);
+    lines.push(p.driveId ? 'Googleドライブ: 保存済み' : 'Googleドライブ: アップロード待ち');
+    lines.forEach((l) => { const d = document.createElement('div'); d.textContent = l; $('photoMeta').appendChild(d); });
+  }
+
+  function showSibling(delta) {
+    const v = topView();
+    const list = photoList();
+    const idx = list.indexOf(v.id);
+    const next = list[idx + delta];
+    if (!next) return;
+    flushPhotoSave();
+    v.id = next;
+    renderPhotoView();
+  }
+
+  function schedulePhotoSave() {
+    clearTimeout(photoSaveTimer);
+    photoSaveTimer = setTimeout(flushPhotoSave, 500);
+  }
+  function flushPhotoSave() {
+    if (photoSaveTimer) { clearTimeout(photoSaveTimer); photoSaveTimer = null; saveData(); }
+  }
+
+  $('photoName').addEventListener('input', () => {
+    const p = currentPhoto();
+    if (!p) return;
+    p.name = $('photoName').value.trim() || defaultName(p.takenAt);
+    $('photoTitle').textContent = p.name;
+    touch(p);
+    schedulePhotoSave();
+  });
+  $('photoMemo').addEventListener('input', () => {
+    const p = currentPhoto();
+    if (!p) return;
+    p.memo = $('photoMemo').value;
+    touch(p);
+    schedulePhotoSave();
+  });
+  const onDateTimeChange = () => {
+    const p = currentPhoto();
+    if (!p) return;
+    const d = parseYmd($('photoDate').value);
+    if (!d) return;
+    const [hh, mm] = ($('photoTime').value || '00:00').split(':').map(Number);
+    d.setHours(hh || 0, mm || 0, 0, 0);
+    p.takenAt = d.getTime();
+    touch(p);
+    schedulePhotoSave();
+  };
+  $('photoDate').addEventListener('change', onDateTimeChange);
+  $('photoTime').addEventListener('change', onDateTimeChange);
+
+  $('photoBackBtn').addEventListener('click', () => { flushPhotoSave(); popView(); });
+  $('photoPrevBtn').addEventListener('click', (e) => { e.stopPropagation(); showSibling(-1); });
+  $('photoNextBtn').addEventListener('click', (e) => { e.stopPropagation(); showSibling(1); });
+  $('photoMoveBtn').addEventListener('click', () => {
+    const p = currentPhoto();
+    if (!p) return;
+    openPicker({
+      title: 'この写真の移動先', mode: 'photos', allowUnsorted: !!photoFolder(p),
+      onPick: (dest) => { movePhotos([p.id], dest); renderPhotoPlace(); }
+    });
+  });
+  $('photoDeleteBtn').addEventListener('click', () => {
+    const p = currentPhoto();
+    if (!p) return;
+    showConfirm('この写真を削除しますか？', 'Googleドライブ上の写真はゴミ箱に移ります(30日以内なら戻せます)。', '削除', () => {
+      const v = topView();
+      const list = photoList();
+      const idx = list.indexOf(p.id);
+      const next = list[idx + 1] || list[idx - 1];
+      deletePhotos([p.id]);
+      if (next) { v.id = next; renderPhotoView(); } else popView();
+    });
+  });
+
+  // タップで拡大、左右スワイプで前後の写真へ
+  let swipeStart = null;
+  photoStage.addEventListener('touchstart', (e) => {
+    if (photoStage.classList.contains('zoomed') || e.touches.length !== 1) { swipeStart = null; return; }
+    swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: true });
+  photoStage.addEventListener('touchend', (e) => {
+    if (!swipeStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeStart.x;
+    const dy = t.clientY - swipeStart.y;
+    swipeStart = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) showSibling(dx < 0 ? 1 : -1);
+  });
+  photoImg.addEventListener('click', () => {
+    const z = photoStage.classList.toggle('zoomed');
+    if (z) ensureTrap();
+  });
+
+  // ---------- 振り分けモード ----------
+  let sortState = null; // { skipped:Set, undo:[], currentId }
+  const sortImg = $('sortImg');
+
+  function sortQueue() {
+    // 古い写真から順に
+    return livePhotos().filter((p) => photoFolder(p) === null).sort((a, b) => (a.takenAt || 0) - (b.takenAt || 0));
+  }
+
+  function pickNextSortId() {
+    const p = sortQueue().find((x) => !sortState.skipped.has(x.id));
+    return p ? p.id : null;
+  }
+
+  function startSort() {
+    sortState = { skipped: new Set(), undo: [], currentId: null };
+    sortState.currentId = pickNextSortId();
+    pushView({ type: 'sort' });
+  }
+
+  function sortCurrent() {
+    const p = sortState && data.photos[sortState.currentId];
+    return p && !p.deleted && photoFolder(p) === null ? p : null;
+  }
+
+  function renderSortView(fromSync) {
+    if (!sortState) { popView(); return; }
+    const prevId = sortState.currentId;
+    if (!sortCurrent()) sortState.currentId = pickNextSortId();
+    const p = sortCurrent();
+    const remaining = sortQueue().length;
+    const skippedLeft = sortQueue().filter((x) => sortState.skipped.has(x.id)).length;
+    $('sortTitle').textContent = `振り分け 残り${remaining}枚` + (skippedLeft ? `(あとで${skippedLeft})` : '');
+    $('sortUndoBtn').disabled = !sortState.undo.length;
+    $('sortSkipBtn').disabled = !p;
+    $('sortInfoBtn').classList.toggle('hidden', !p);
+    $('sortDeleteBtn').classList.toggle('hidden', !p);
+
+    const done = $('sortDone');
+    if (!p) {
+      sortImg.classList.add('hidden');
+      $('sortInfo').classList.add('hidden');
+      $('destGrid').innerHTML = '';
+      done.classList.remove('hidden');
+      done.innerHTML = '';
+      const msg = document.createElement('div');
+      if (skippedLeft) {
+        msg.textContent = `「あとで」にした写真が ${skippedLeft}枚 残っています`;
+        const again = document.createElement('button');
+        again.className = 'small-btn';
+        again.style.marginTop = '12px';
+        again.textContent = 'もう一度見直す';
+        again.addEventListener('click', () => { sortState.skipped.clear(); sortState.currentId = pickNextSortId(); renderSortView(); });
+        done.append(msg, again);
+      } else {
+        msg.textContent = '未整理の写真はすべて振り分けました 🎉';
+        done.appendChild(msg);
+      }
+      const end = document.createElement('div');
+      const endBtn = document.createElement('button');
+      endBtn.className = 'small-btn';
+      endBtn.style.marginTop = '12px';
+      endBtn.textContent = '終了する';
+      endBtn.addEventListener('click', popView);
+      end.appendChild(endBtn);
+      done.appendChild(end);
+      return;
+    }
+    done.classList.add('hidden');
+    sortImg.classList.remove('hidden');
+    $('sortInfo').classList.remove('hidden');
+    $('sortName').textContent = p.name;
+    $('sortDate').textContent = '撮影 ' + formatDateTime(p.takenAt);
+    if (!fromSync || prevId !== p.id || !sortImg.getAttribute('src')) {
+      const id = p.id;
+      showLargeImage(sortImg, p, () => topView().type === 'sort' && sortState && sortState.currentId === id, null);
+      // 次の写真を先に読み込んでおく
+      const nextP = sortQueue().find((x) => x.id !== id && !sortState.skipped.has(x.id));
+      if (nextP) getViewBlob(nextP);
+    }
+    renderDestButtons();
+  }
+
+  function destCandidates() {
+    const list = getRecent();
+    const seen = new Set(list);
+    if (list.length < 8) {
+      // 最近使ったものが少ないうちは、ホーム直下のフォルダ→その他の順で埋める
+      const rest = liveFolders().filter((f) => !seen.has(f.id) && folderPath(f.id).length)
+        .sort((a, b) => folderPath(a.id).length - folderPath(b.id).length || byName(a, b));
+      for (const f of rest) {
+        if (list.length >= 8) break;
+        list.push(f.id);
+      }
+    }
+    return list.slice(0, 8);
+  }
+
+  function renderDestButtons() {
+    const grid = $('destGrid');
+    grid.innerHTML = '';
+    destCandidates().forEach((id) => {
+      const f = getFolder(id);
+      const b = document.createElement('button');
+      b.className = 'dest-btn';
+      const n = document.createElement('span');
+      n.className = 'dest-name';
+      n.textContent = f.name;
+      b.appendChild(n);
+      const parents = folderPath(id).slice(0, -1).map((x) => x.name).join(' › ');
+      if (parents) {
+        const s = document.createElement('span');
+        s.className = 'dest-sub';
+        s.textContent = parents;
+        b.appendChild(s);
+      }
+      b.addEventListener('click', () => sortAssign(id));
+      grid.appendChild(b);
+    });
+    const other = document.createElement('button');
+    other.className = 'dest-btn other';
+    other.textContent = liveFolders().length ? '📁 ほかのフォルダ・新しいフォルダ…' : '＋ 行き先のフォルダを作る';
+    other.addEventListener('click', () => {
+      openPicker({ title: 'この写真の行き先', mode: 'photos', onPick: (dest) => sortAssign(dest) });
+    });
+    grid.appendChild(other);
+  }
+
+  function flash(text) {
+    const el = document.createElement('div');
+    el.className = 'flash';
+    el.textContent = text;
+    $('sortStage').appendChild(el);
+    setTimeout(() => el.remove(), 700);
+  }
+
+  function sortAssign(destId) {
+    const p = sortCurrent();
+    if (!p || !destId) return;
+    p.folderId = destId;
+    touch(p);
+    addRecent(destId);
+    saveData();
+    sortState.undo.push({ type: 'move', id: p.id });
+    sortState.currentId = pickNextSortId();
+    flash('→ ' + getFolder(destId).name);
+    renderSortView();
+  }
+
+  $('sortSkipBtn').addEventListener('click', () => {
+    const p = sortCurrent();
+    if (!p) return;
+    sortState.skipped.add(p.id);
+    sortState.undo.push({ type: 'skip', id: p.id });
+    sortState.currentId = pickNextSortId();
+    renderSortView();
+  });
+
+  $('sortUndoBtn').addEventListener('click', () => {
+    const e = sortState && sortState.undo.pop();
+    if (!e) return;
+    const p = data.photos[e.id];
+    if (!p || p.deleted) { renderSortView(); return; }
+    if (e.type === 'move') {
+      p.folderId = null;
+      touch(p);
+      saveData();
+    } else {
+      sortState.skipped.delete(e.id);
+    }
+    sortState.currentId = e.id;
+    renderSortView();
+  });
+
+  $('sortDeleteBtn').addEventListener('click', () => {
+    const p = sortCurrent();
+    if (!p) return;
+    showConfirm('この写真を削除しますか？', 'Googleドライブ上の写真はゴミ箱に移ります(30日以内なら戻せます)。', '削除', () => {
+      deletePhotos([p.id]);
+      sortState.undo = sortState.undo.filter((x) => x.id !== p.id);
+      sortState.currentId = pickNextSortId();
+      renderSortView();
+    });
+  });
+
+  $('sortInfoBtn').addEventListener('click', () => {
+    const p = sortCurrent();
+    if (p) pushView({ type: 'photo', id: p.id, list: [p.id] });
+  });
+  $('sortBackBtn').addEventListener('click', popView);
+
+  // ---------- 行き先フォルダを選ぶ画面 ----------
+  // mode 'photos': 写真の行き先(ホームには置けない) / mode 'folder': フォルダの移動先(ホーム直下も可)
+  let picker = null;
+
+  function openPicker(opts) {
+    picker = Object.assign({ browse: 'root' }, opts);
+    $('pickerTitle').textContent = opts.title || '行き先のフォルダ';
+    $('pickerSearch').value = '';
+    pickerOverlay.classList.remove('hidden');
+    renderPicker();
+    ensureTrap();
+  }
+
+  function closePicker() {
+    pickerOverlay.classList.add('hidden');
+    picker = null;
+  }
+
+  function pickerAllows(id) {
+    if (!picker) return false;
+    if (picker.mode === 'folder') {
+      const moving = picker.movingFolderId;
+      if (id === moving || (id !== 'root' && isInside(id, moving))) return false;
+    }
+    return true;
+  }
+
+  function choose(id) {
+    const p = picker;
+    closePicker();
+    if (p && p.onPick) p.onPick(id);
+  }
+
+  function renderPicker() {
+    if (!picker) return;
+    const q = normalizeForSearch($('pickerSearch').value.trim());
+    const recentWrap = $('pickerRecentWrap');
+    const recentEl = $('pickerRecent');
+    const crumbEl = $('pickerCrumb');
+    const listEl = $('pickerList');
+    recentEl.innerHTML = '';
+    crumbEl.innerHTML = '';
+    listEl.innerHTML = '';
+
+    const recent = getRecent().filter(pickerAllows).slice(0, 6);
+    recentWrap.classList.toggle('hidden', !!q || !recent.length);
+    recent.forEach((id) => {
+      const c = document.createElement('button');
+      c.className = 'chip';
+      c.textContent = getFolder(id).name;
+      c.title = folderLabel(id);
+      c.addEventListener('click', () => choose(id));
+      recentEl.appendChild(c);
+    });
+
+    let rows;
+    if (q) {
+      crumbEl.classList.add('hidden');
+      rows = liveFolders().filter((f) => folderPath(f.id).length && pickerAllows(f.id) && normalizeForSearch(f.name).includes(q))
+        .sort(byName).map((f) => ({ f, showPath: true }));
+    } else {
+      crumbEl.classList.remove('hidden');
+      if (!getFolder(picker.browse)) picker.browse = 'root';
+      const chain = [ROOT].concat(folderPath(picker.browse));
+      chain.forEach((f, i) => {
+        if (i > 0) {
+          const sep = document.createElement('span');
+          sep.className = 'crumb-sep';
+          sep.textContent = '›';
+          crumbEl.appendChild(sep);
+        }
+        const el = document.createElement('span');
+        const isCurrent = i === chain.length - 1;
+        el.className = 'crumb' + (isCurrent ? ' crumb-current' : '');
+        el.textContent = f.name;
+        if (!isCurrent) el.addEventListener('click', () => { picker.browse = f.id; renderPicker(); });
+        crumbEl.appendChild(el);
+      });
+      rows = childFolders(picker.browse).filter((f) => pickerAllows(f.id)).map((f) => ({ f, showPath: false }));
+    }
+
+    if (!rows.length) {
+      const e = document.createElement('div');
+      e.className = 'pick-empty';
+      e.textContent = q ? '見つかりません。「＋ 新しいフォルダ」で作れます' : 'この中にフォルダはありません';
+      listEl.appendChild(e);
+    }
+    rows.forEach(({ f, showPath }) => {
+      const row = document.createElement('div');
+      row.className = 'pick-row';
+      const main = document.createElement('div');
+      main.className = 'pick-main';
+      main.textContent = '📁 ' + f.name;
+      if (showPath) {
+        const parents = folderPath(f.id).slice(0, -1).map((x) => x.name).join(' › ');
+        const s = document.createElement('span');
+        s.className = 'pick-path';
+        s.textContent = parents ? 'ホーム › ' + parents : 'ホーム';
+        main.appendChild(s);
+      }
+      main.addEventListener('click', () => choose(f.id));
+      row.appendChild(main);
+      if (childFolders(f.id).some((c) => pickerAllows(c.id))) {
+        const open = document.createElement('button');
+        open.className = 'pick-open';
+        open.textContent = '中を見る ›';
+        open.addEventListener('click', () => { picker.browse = f.id; $('pickerSearch').value = ''; renderPicker(); });
+        row.appendChild(open);
+      }
+      listEl.appendChild(row);
+    });
+
+    const atRoot = picker.browse === 'root';
+    const hereBtn = $('pickerHereBtn');
+    if (q) hereBtn.classList.add('hidden');
+    else if (picker.mode === 'folder') {
+      hereBtn.classList.remove('hidden');
+      hereBtn.textContent = atRoot ? 'ホーム直下に移動' : `「${getFolder(picker.browse).name}」に決定`;
+    } else {
+      hereBtn.classList.toggle('hidden', atRoot);
+      if (!atRoot) hereBtn.textContent = `「${getFolder(picker.browse).name}」に決定`;
+    }
+    $('pickerUnsortedBtn').classList.toggle('hidden', !(picker.mode === 'photos' && picker.allowUnsorted));
+  }
+
+  $('pickerSearch').addEventListener('input', renderPicker);
+  $('pickerCancelBtn').addEventListener('click', closePicker);
+  $('pickerHereBtn').addEventListener('click', () => { if (picker) choose(picker.browse); });
+  $('pickerUnsortedBtn').addEventListener('click', () => choose(null));
+  $('pickerNewBtn').addEventListener('click', () => {
+    if (!picker) return;
+    const parent = $('pickerSearch').value.trim() ? 'root' : picker.browse;
+    const suggested = $('pickerSearch').value.trim();
+    showPrompt(`新しいフォルダの名前(作る場所: ${folderLabel(parent) || 'ホーム'})`, suggested, (name) => {
+      if (!name) return;
+      const f = { id: genId(), name, parentId: parent, updatedAt: Date.now() };
+      data.folders[f.id] = f;
+      saveData();
+      choose(f.id);
+    });
+  });
+
+  // ---------- Google Drive 同期 ----------
+  const GOOGLE_CLIENT_ID = '714202952870-hf8no72rpvh31nrpddqnpl77ibjsj3hc.apps.googleusercontent.com';
+  const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  const DRIVE_DATA_NAME = 'photo_data.json';
+  const DRIVE_APP_FOLDER = '写真整理';
+  const DRIVE_THUMB_FOLDER = 'サムネイル';
+  const DRIVE_FILE_ID_KEY = 'photoAppDriveFileId_v1';
+  const GOOGLE_LINKED_KEY = 'photoAppGoogleLinked_v1';
+  const GOOGLE_HINT_KEY = 'photoAppGoogleHint_v1';
+  const MEMO_HINT_KEY = 'memoAppGoogleHint_v1'; // メモ帳と同じアカウントを使うため、あれば参考にする
+
+  let syncState = 'signed_out'; // 'signed_out' | 'idle' | 'syncing' | 'error'
+  let accessToken = null;
+  let dataFileId = localStorage.getItem(DRIVE_FILE_ID_KEY);
+  let pendingDriveUpload = false;
+  let driveSyncTimer = null;
+  let gisTokenClient = null;
+  let lastSyncedAt = null;
+  let autoSignInArmed = false;
+  let syncBusy = false;
+  let syncAgain = false;
+
+  function setSyncState(state) {
+    syncState = state;
+    updateSyncStatusUI();
+  }
+
+  function updateSyncStatusUI() {
+    let text = '';
+    if (syncState === 'signed_out') text = autoSignInArmed ? '画面に触れると同期を再開します' : 'Googleと未連携です';
+    else if (syncState === 'syncing') text = '同期中…';
+    else if (syncState === 'error') text = navigator.onLine ? '同期エラーが発生しました' : 'オフライン - オンライン復帰時に自動で同期します';
+    else if (syncState === 'idle') text = lastSyncedAt ? `最終同期: ${formatDateTime(lastSyncedAt)}` : '同期の準備ができています';
+    syncStatusText.textContent = text;
+    signInBtn.classList.toggle('hidden', syncState !== 'signed_out');
+    signOutBtn.classList.toggle('hidden', syncState === 'signed_out');
+    updateUploadStatus();
+  }
+
+  async function updateUploadStatus() {
+    const keys = await idbKeys('pending');
+    const n = keys.filter((id) => data.photos[id] && !data.photos[id].deleted).length;
+    const text = n ? `☁ Googleドライブへのアップロード待ち ${n}枚` + (accessToken ? (uploadBusy ? '(アップロード中…)' : '') : '(サインインすると送ります)') : '';
+    uploadStatusText.textContent = text || '☁ すべての写真をGoogleドライブに保存済みです';
+    const homeEl = $('homeUploadStatus');
+    if (homeEl) {
+      homeEl.textContent = text;
+      homeEl.classList.toggle('hidden', !text);
+    }
+  }
+
+  function loadGisScript(callback) {
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) { callback(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = callback;
+    s.onerror = () => setSyncState('error');
+    document.head.appendChild(s);
+  }
+
+  function initDriveSync() {
+    loadGisScript(() => {
+      gisTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: DRIVE_SCOPE,
+        callback: handleGisToken,
+        error_callback: () => { setSyncState('signed_out'); }
+      });
+      // 起動直後に自分でサインイン画面を開くとポップアップとしてブロックされるため、
+      // 以前サインインしたことがあれば、ロック解除後に画面に触れたタイミングでサインインし直す
+      if (localStorage.getItem(GOOGLE_LINKED_KEY) || dataFileId) armAutoSignIn();
+    });
+  }
+
+  function handleGisToken(resp) {
+    if (resp && resp.access_token) {
+      accessToken = resp.access_token;
+      localStorage.setItem(GOOGLE_LINKED_KEY, '1');
+      disarmAutoSignIn();
+      thumbFailed.clear();
+      setSyncState('idle');
+      syncNow();
+      rememberGoogleAccount();
+    } else {
+      setSyncState('signed_out');
+    }
+  }
+
+  async function rememberGoogleAccount() {
+    try {
+      const res = await driveApiFetch('/drive/v3/about?fields=user(emailAddress)');
+      if (!res.ok) return;
+      const d = await res.json();
+      if (d.user && d.user.emailAddress) localStorage.setItem(GOOGLE_HINT_KEY, d.user.emailAddress);
+    } catch (e) { /* 覚えられなくても同期には影響しない */ }
+  }
+
+  function onTapForAutoSignIn(e) {
+    if (!lockView.classList.contains('hidden')) return; // ロック中はPIN・指紋の操作を優先する
+    if (e.target === signInBtn) { disarmAutoSignIn(); return; } // サインインボタン自体の処理に任せる
+    // 撮影・写真選択のボタンは、カメラ等の画面と重ならないよう次のタップに回す
+    if (e.target.closest && e.target.closest('[data-skip-signin]')) return;
+    disarmAutoSignIn();
+    if (!gisTokenClient || accessToken) return;
+    const hint = localStorage.getItem(GOOGLE_HINT_KEY) || localStorage.getItem(MEMO_HINT_KEY);
+    gisTokenClient.requestAccessToken(hint ? { prompt: '', hint } : { prompt: '' });
+  }
+
+  function armAutoSignIn() {
+    if (autoSignInArmed) return;
+    autoSignInArmed = true;
+    document.addEventListener('click', onTapForAutoSignIn, true);
+    updateSyncStatusUI();
+  }
+
+  function disarmAutoSignIn() {
+    if (!autoSignInArmed) return;
+    autoSignInArmed = false;
+    document.removeEventListener('click', onTapForAutoSignIn, true);
+    updateSyncStatusUI();
+  }
+
+  function signIn() {
+    if (!gisTokenClient) { initDriveSync(); return; }
+    const hint = localStorage.getItem(MEMO_HINT_KEY);
+    gisTokenClient.requestAccessToken(hint ? { prompt: 'consent', hint } : { prompt: 'consent' });
+  }
+
+  function signOut() {
+    const oldToken = accessToken;
+    accessToken = null;
+    dataFileId = null;
+    localStorage.removeItem(DRIVE_FILE_ID_KEY);
+    localStorage.removeItem(GOOGLE_LINKED_KEY);
+    localStorage.removeItem(GOOGLE_HINT_KEY);
+    disarmAutoSignIn();
+    setSyncState('signed_out');
+    if (window.google && oldToken) google.accounts.oauth2.revoke(oldToken, () => {});
+  }
+
+  function silentReauth() {
+    // 期限切れ。ここで自分からサインイン画面を開くとポップアップとしてブロックされるので、
+    // 次に画面に触れたときにサインインし直す(取り直したらDriveとの同期も再開される)
+    accessToken = null;
+    if (gisTokenClient) armAutoSignIn();
+    setSyncState('signed_out');
+    return false;
+  }
+
+  async function driveApiFetch(path, options) {
+    if (!accessToken) throw new Error('no token');
+    options = options || {};
+    options.headers = Object.assign({}, options.headers, { Authorization: 'Bearer ' + accessToken });
+    const res = await fetch('https://www.googleapis.com' + path, options);
+    if (res.status === 401) silentReauth();
+    return res;
+  }
+
+  async function driveFind(q) {
+    const res = await driveApiFetch(`/drive/v3/files?q=${encodeURIComponent(q)}&spaces=drive&fields=files(id)&orderBy=createdTime`);
+    if (!res.ok) throw new Error('find');
+    const d = await res.json();
+    return (d.files && d.files[0]) || null;
+  }
+
+  async function driveCreateFolder(name, parentId) {
+    const meta = { name, mimeType: 'application/vnd.google-apps.folder' };
+    if (parentId) meta.parents = [parentId];
+    const res = await driveApiFetch('/drive/v3/files?fields=id', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify(meta)
+    });
+    if (!res.ok) throw new Error('mkdir');
+    return (await res.json()).id;
+  }
+
+  async function ensureDriveFolders() {
+    if (!data.driveFolderId) {
+      const f = await driveFind(`name='${DRIVE_APP_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      data.driveFolderId = f ? f.id : await driveCreateFolder(DRIVE_APP_FOLDER, null);
+      saveData();
+    }
+    if (!data.driveThumbFolderId) {
+      const f = await driveFind(`name='${DRIVE_THUMB_FOLDER}' and '${data.driveFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      data.driveThumbFolderId = f ? f.id : await driveCreateFolder(DRIVE_THUMB_FOLDER, data.driveFolderId);
+      saveData();
+    }
+    return { main: data.driveFolderId, thumbs: data.driveThumbFolderId };
+  }
+
+  // 写真のような大きいファイルは「再開可能アップロード」で送る
+  async function driveUploadBlob(blob, name, parentId, mime) {
+    const meta = { name, parents: [parentId], mimeType: mime };
+    const res = await driveApiFetch('/upload/drive/v3/files?uploadType=resumable&fields=id', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': mime },
+      body: JSON.stringify(meta)
+    });
+    if (!res.ok) throw new Error('upload-init');
+    const loc = res.headers.get('Location');
+    if (loc) {
+      const put = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': mime }, body: blob });
+      if (!put.ok) throw new Error('upload');
+      return (await put.json()).id;
+    }
+    // Location が読めない環境向け: 1回で送る方式
+    const boundary = 'photoapp_' + Date.now().toString(36);
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`,
+      blob,
+      `\r\n--${boundary}--`
+    ]);
+    const res2 = await driveApiFetch('/upload/drive/v3/files?uploadType=multipart&fields=id', {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body
+    });
+    if (!res2.ok) throw new Error('upload');
+    return (await res2.json()).id;
+  }
+
+  async function driveTrash(fileId) {
+    if (!fileId) return;
+    const res = await driveApiFetch(`/drive/v3/files/${fileId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ trashed: true })
+    });
+    if (!res.ok && res.status !== 404) throw new Error('trash');
+  }
+
+  function photoFileName(p) {
+    const d = new Date(p.takenAt || Date.now());
+    const ext = /png/.test(p.mime) ? 'png' : /webp/.test(p.mime) ? 'webp' : /gif/.test(p.mime) ? 'gif' : /heic|heif/.test(p.mime) ? 'heic' : 'jpg';
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}_${p.id.slice(-6)}.${ext}`;
+  }
+
+  // 端末に残っている「アップロード待ち」の写真をDriveに送る。削除した写真はDriveのゴミ箱へ
+  let uploadBusy = false;
+  async function processUploads() {
+    if (uploadBusy || importing || !accessToken || !navigator.onLine) return;
+    uploadBusy = true;
+    updateUploadStatus();
+    let changed = false;
+    try {
+      for (const p of Object.values(data.photos)) {
+        if (!accessToken) break;
+        if (p.deleted && (p.driveId || p.thumbDriveId) && !p.driveTrashed) {
+          await driveTrash(p.driveId);
+          await driveTrash(p.thumbDriveId);
+          const cur = data.photos[p.id];
+          if (cur) { cur.driveTrashed = true; changed = true; }
+        }
+      }
+      const keys = await idbKeys('pending');
+      for (const id of keys) {
+        if (!accessToken) break;
+        let p = data.photos[id];
+        if (!p || p.deleted) { await idbDel('pending', id); continue; }
+        if (!p.driveId) {
+          const blob = await idbGet('pending', id);
+          if (!blob) continue;
+          const folders = await ensureDriveFolders();
+          const driveId = await driveUploadBlob(blob, photoFileName(p), folders.main, p.mime || blob.type || 'image/jpeg');
+          p = data.photos[id];
+          if (!p) continue;
+          p.driveId = driveId; // 他の項目の更新日時は変えない(他端末での編集を上書きしないため)
+          changed = true;
+          persistLocal();
+        }
+        if (!p.thumbDriveId) {
+          const tb = await idbGet('thumbs', id);
+          if (tb) {
+            const folders = await ensureDriveFolders();
+            const tid = await driveUploadBlob(tb, 'thumb_' + id + '.jpg', folders.thumbs, 'image/jpeg');
+            p = data.photos[id];
+            if (!p) continue;
+            p.thumbDriveId = tid;
+            changed = true;
+            persistLocal();
+          }
+        }
+        if (p.driveId && p.thumbDriveId) await idbDel('pending', id);
+        if (p.deleted) continue;
+        document.querySelectorAll(`.tile[data-id="${id}"] .tile-badge`).forEach((b) => b.remove());
+        updateUploadStatus();
+      }
+    } catch (e) {
+      /* 通信エラー等。次の同期のタイミングで続きから送る */
+    } finally {
+      uploadBusy = false;
+      updateUploadStatus();
+      if (changed) saveData();
+    }
+  }
+
+  async function driveDownloadJson(fileId) {
+    const res = await driveApiFetch(`/drive/v3/files/${fileId}?alt=media`);
+    if (res.status === 404) return { notFound: true };
+    if (!res.ok) throw new Error('download');
+    try { return await res.json(); } catch (e) { return null; }
+  }
+
+  async function uploadDataFile() {
+    const body = JSON.stringify(data);
+    if (dataFileId) {
+      const res = await driveApiFetch(`/upload/drive/v3/files/${dataFileId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body
+      });
+      if (res.status === 404) {
+        dataFileId = null;
+        localStorage.removeItem(DRIVE_FILE_ID_KEY);
+        return uploadDataFile();
+      }
+      return res.ok;
+    }
+    const folders = await ensureDriveFolders();
+    const boundary = 'photoapp_' + Date.now().toString(36);
+    const metadata = JSON.stringify({ name: DRIVE_DATA_NAME, parents: [folders.main] });
+    const multipartBody =
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n` +
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(data)}\r\n--${boundary}--`;
+    const res = await driveApiFetch('/upload/drive/v3/files?uploadType=multipart&fields=id', {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body: multipartBody
+    });
+    if (!res.ok) return false;
+    dataFileId = (await res.json()).id;
+    localStorage.setItem(DRIVE_FILE_ID_KEY, dataFileId);
+    return true;
+  }
+
+  // 写真・フォルダ1件ずつ、新しく更新された方を採用して合体させる
+  // (複数の端末で別々に写真を追加しても、どちらも消えないようにするため)
+  function mergeRecord(l, r) {
+    if (!l) return r;
+    if (!r) return l;
+    const newer = (r.updatedAt || 0) > (l.updatedAt || 0) ? r : l;
+    const older = newer === r ? l : r;
+    const m = Object.assign({}, newer);
+    ['driveId', 'thumbDriveId', 'driveTrashed'].forEach((k) => { if (!m[k] && older[k]) m[k] = older[k]; });
+    if (older.deleted && !m.deleted) {
+      // どちらかで削除されていれば削除を優先する
+      Object.keys(m).forEach((k) => { if (!['id', 'driveId', 'thumbDriveId', 'driveTrashed'].includes(k)) delete m[k]; });
+      m.deleted = true;
+      m.updatedAt = Math.max(l.updatedAt || 0, r.updatedAt || 0);
+    }
+    return m;
+  }
+
+  function mergeRemote(remote) {
+    if (!remote || typeof remote !== 'object' || !remote.photos || !remote.folders) return { changedLocal: false, needUpload: true };
+    let changedLocal = false;
+    let needUpload = false;
+    ['folders', 'photos'].forEach((key) => {
+      const L = data[key];
+      const R = remote[key];
+      const ids = new Set(Object.keys(L).concat(Object.keys(R)));
+      ids.forEach((id) => {
+        const l = L[id];
+        const r = R[id];
+        const m = mergeRecord(l, r);
+        const ms = JSON.stringify(m);
+        if (ms !== JSON.stringify(l)) {
+          if (key === 'photos' && m.deleted && l && !l.deleted) purgeLocalPhoto(id);
+          L[id] = m;
+          changedLocal = true;
+        }
+        if (ms !== JSON.stringify(r)) needUpload = true;
+      });
+    });
+    ['driveFolderId', 'driveThumbFolderId'].forEach((k) => {
+      if (remote[k]) {
+        if (data[k] !== remote[k]) { data[k] = remote[k]; changedLocal = true; }
+      } else if (data[k]) needUpload = true;
+    });
+    return { changedLocal, needUpload };
+  }
+
+  async function syncNow() {
+    clearTimeout(driveSyncTimer);
+    if (!accessToken) { pendingDriveUpload = true; return; }
+    if (!navigator.onLine) { pendingDriveUpload = true; setSyncState('error'); return; }
+    if (syncBusy) { syncAgain = true; return; }
+    syncBusy = true;
+    setSyncState('syncing');
+    try {
+      if (!dataFileId) {
+        const f = await driveFind(`name='${DRIVE_DATA_NAME}' and trashed=false`);
+        if (f) { dataFileId = f.id; localStorage.setItem(DRIVE_FILE_ID_KEY, dataFileId); }
+      }
+      let remote = null;
+      if (dataFileId) {
+        remote = await driveDownloadJson(dataFileId);
+        if (remote && remote.notFound) {
+          dataFileId = null;
+          localStorage.removeItem(DRIVE_FILE_ID_KEY);
+          const f = await driveFind(`name='${DRIVE_DATA_NAME}' and trashed=false`);
+          remote = null;
+          if (f) {
+            dataFileId = f.id;
+            localStorage.setItem(DRIVE_FILE_ID_KEY, dataFileId);
+            remote = await driveDownloadJson(dataFileId);
+            if (remote && remote.notFound) remote = null;
+          }
+        }
+      }
+      const { changedLocal, needUpload } = mergeRemote(remote);
+      if (changedLocal) {
+        persistLocal();
+        refreshCurrentView();
+      }
+      if (needUpload || !dataFileId) {
+        if (!(await uploadDataFile())) throw new Error('upload');
+      }
+      pendingDriveUpload = false;
+      lastSyncedAt = Date.now();
+      setSyncState('idle');
+    } catch (e) {
+      if (accessToken) setSyncState('error');
+    } finally {
+      syncBusy = false;
+    }
+    if (syncAgain) { syncAgain = false; syncNow(); return; }
+    processUploads();
+  }
+
+  function scheduleDriveSync() {
+    pendingDriveUpload = true;
+    clearTimeout(driveSyncTimer);
+    driveSyncTimer = setTimeout(syncNow, 1200);
+  }
+
+  window.addEventListener('online', () => { if (accessToken) syncNow(); });
+
+  // アプリが再び前に来たとき・一定間隔で、他の端末での変更を取り込む
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && accessToken) syncNow();
+  });
+  setInterval(() => {
+    if (accessToken && !syncBusy && !document.hidden) syncNow();
+  }, 30000);
+
+  signInBtn.addEventListener('click', signIn);
+  signOutBtn.addEventListener('click', signOut);
+  $('syncNowBtn').addEventListener('click', () => {
+    if (!accessToken) { signIn(); return; }
+    syncNow();
+  });
+
+  // ---------- 設定 ----------
+  $('settingsBtn').addEventListener('click', () => {
+    settingsOverlay.classList.remove('hidden');
+    updateSyncStatusUI();
+    ensureTrap();
+  });
+  $('settingsCloseBtn').addEventListener('click', () => settingsOverlay.classList.add('hidden'));
+
+  // ---------- PINロック ----------
+  const lockMessage = $('lockMessage');
+  const lockInput = $('lockInput');
+  const lockConfirmInput = $('lockConfirmInput');
+  const lockError = $('lockError');
+  const lockBioBtn = $('lockBioBtn');
+  const bioOnBtn = $('bioOnBtn');
+  const bioOffBtn = $('bioOffBtn');
+  const PIN_HASH_KEY = 'photoAppPinHash_v1';
+  const BIO_CRED_KEY = 'photoAppBioCred_v1';
+
+  async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function isPinConfigured() {
+    return !!localStorage.getItem(PIN_HASH_KEY);
+  }
+
+  // ---------- 指紋で解除(端末の指紋・画面ロックで本人確認する) ----------
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const unb64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+  const randomBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
+  let bioSupported = false;
+  let bioInProgress = false;
+
+  function isBioConfigured() {
+    return !!localStorage.getItem(BIO_CRED_KEY);
+  }
+
+  async function checkBioSupported() {
+    try {
+      bioSupported = !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+    } catch (e) {
+      bioSupported = false;
+    }
+    updateBioSettingsUI();
+  }
+
+  function updateBioSettingsUI() {
+    bioOnBtn.classList.toggle('hidden', !bioSupported || isBioConfigured());
+    bioOffBtn.classList.toggle('hidden', !isBioConfigured());
+  }
+
+  async function bioRegister() {
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: randomBytes(32),
+      rp: { name: '写真整理' },
+      user: { id: randomBytes(16), name: '写真整理', displayName: '写真整理' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+      timeout: 60000
+    } });
+    localStorage.setItem(BIO_CRED_KEY, b64(cred.rawId));
+  }
+
+  async function bioVerify() {
+    const res = await navigator.credentials.get({ publicKey: {
+      challenge: randomBytes(32),
+      allowCredentials: [{ type: 'public-key', id: unb64(localStorage.getItem(BIO_CRED_KEY)) }],
+      userVerification: 'required',
+      timeout: 60000
+    } });
+    // authenticatorData の UV フラグ(本人確認済み)を確かめる
+    const flags = new Uint8Array(res.response.authenticatorData)[32];
+    return !!(flags & 0x04);
+  }
+
+  async function tryBioUnlock() {
+    if (bioInProgress || !isPinConfigured() || !isBioConfigured() || lockView.classList.contains('hidden')) return;
+    bioInProgress = true;
+    try {
+      if (await bioVerify()) {
+        hideLockScreen();
+      } else {
+        lockError.textContent = '指紋を確認できませんでした';
+        lockError.classList.remove('hidden');
+      }
+    } catch (e) {
+      // キャンセルされた場合などは、そのままPIN入力を続けてもらう
+    } finally {
+      bioInProgress = false;
+    }
+  }
+
+  function showLockScreen() {
+    lockView.classList.remove('hidden');
+    lockError.classList.add('hidden');
+    lockInput.value = '';
+    lockConfirmInput.value = '';
+    if (isPinConfigured()) {
+      lockMessage.textContent = 'PINコードを入力してください';
+      lockConfirmInput.classList.add('hidden');
+    } else {
+      lockMessage.textContent = 'はじめに使うPINコードを設定してください(4桁以上の数字)';
+      lockConfirmInput.classList.remove('hidden');
+    }
+    const useBio = isPinConfigured() && isBioConfigured();
+    lockBioBtn.classList.toggle('hidden', !useBio);
+    if (useBio) {
+      // 画面に出ているときだけ指紋の確認を出す(閉じる途中のpagehideでは出さない)
+      if (document.visibilityState === 'visible') setTimeout(tryBioUnlock, 300);
+    } else {
+      setTimeout(() => lockInput.focus(), 50);
+    }
+  }
+
+  function hideLockScreen() {
+    lockView.classList.add('hidden');
+  }
+
+  async function handleLockSubmit() {
+    const value = lockInput.value.trim();
+    if (value.length < 4) {
+      lockError.textContent = '4桁以上の数字を入力してください';
+      lockError.classList.remove('hidden');
+      return;
+    }
+    if (isPinConfigured()) {
+      const stored = localStorage.getItem(PIN_HASH_KEY);
+      const hash = await sha256Hex(value);
+      if (hash !== stored) {
+        lockError.textContent = 'PINコードが違います';
+        lockError.classList.remove('hidden');
+        lockInput.value = '';
+        lockInput.focus();
+        return;
+      }
+      hideLockScreen();
+    } else {
+      const confirmValue = lockConfirmInput.value.trim();
+      if (confirmValue !== value) {
+        lockError.textContent = '確認用のPINコードが一致しません';
+        lockError.classList.remove('hidden');
+        lockConfirmInput.value = '';
+        lockConfirmInput.focus();
+        return;
+      }
+      const hash = await sha256Hex(value);
+      localStorage.setItem(PIN_HASH_KEY, hash);
+      hideLockScreen();
+    }
+  }
+
+  $('lockSubmitBtn').addEventListener('click', handleLockSubmit);
+  lockInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && lockConfirmInput.classList.contains('hidden')) handleLockSubmit();
+  });
+  lockConfirmInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleLockSubmit();
+  });
+
+  lockBioBtn.addEventListener('click', tryBioUnlock);
+
+  bioOnBtn.addEventListener('click', async () => {
+    try {
+      await bioRegister();
+      updateBioSettingsUI();
+      alert('指紋で解除できるようになりました');
+    } catch (e) {
+      alert('指紋の登録ができませんでした');
+    }
+  });
+
+  bioOffBtn.addEventListener('click', () => {
+    localStorage.removeItem(BIO_CRED_KEY);
+    updateBioSettingsUI();
+    alert('指紋での解除をやめました');
+  });
+
+  $('changePinBtn').addEventListener('click', () => {
+    settingsOverlay.classList.add('hidden');
+    localStorage.removeItem(PIN_HASH_KEY);
+    showLockScreen();
+  });
+
+  // ページを完全に離れる(閉じる/別サイトへ移動する)時だけロックする。
+  // タブの切り替えや最小化、カメラの起動だけでは維持する(頻繁なPIN再入力を避けるため)。
+  window.addEventListener('pagehide', () => { flushPhotoSave(); showLockScreen(); });
+  // 戻るボタン等でキャッシュから復帰したときは、ロック画面のまま指紋の確認を出す
+  window.addEventListener('pageshow', (e) => { if (e.persisted) tryBioUnlock(); });
+
+  render();
+  updateSyncStatusUI();
+  initDriveSync();
+  checkBioSupported();
+  showLockScreen();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
