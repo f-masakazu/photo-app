@@ -1937,7 +1937,7 @@
       contentEl.appendChild(buildUnsortedCard());
       renderFolderSection('root');
     } else if (v.type === 'folder') {
-      renderFolderSection(v.id);
+      // 写真を上、中のフォルダを下に表示する
       const photos = photosIn(v.id);
       contentEl.appendChild(buildPhotoSection(`写真 ${photos.length}枚`, photos, false));
       if (!photos.length) {
@@ -1946,6 +1946,7 @@
         p.textContent = 'このフォルダを開いたまま「📷 撮影」すると、ここに直接入ります';
         contentEl.appendChild(p);
       }
+      renderFolderSection(v.id);
     } else if (v.type === 'unsorted') {
       const photos = unsortedPhotos();
       if (photos.length) {
@@ -2017,7 +2018,7 @@
     const folders = childFolders(parentId);
     const head = document.createElement('div');
     head.className = 'section-head';
-    head.textContent = `フォルダ ${folders.length}`;
+    head.textContent = `フォルダ ${folders.length}箇所`;
     contentEl.appendChild(head);
     if (!folders.length && parentId === 'root') {
       const p = document.createElement('p');
@@ -2046,7 +2047,7 @@
     const direct = photosIn(f.id).length;
     const deep = countDeep(f.id);
     const subs = childFolders(f.id).length;
-    meta.textContent = `写真 ${direct}枚` + (subs ? `・フォルダ ${subs}` : '') + (deep !== direct ? `(中も含めて${deep}枚)` : '');
+    meta.textContent = `写真 ${direct}枚` + (subs ? `・フォルダ ${subs}箇所` : '') + (deep !== direct ? `(中も含めて${deep}枚)` : '');
     text.append(name, meta);
     main.append(icon, text);
     main.addEventListener('click', () => pushView({ type: 'folder', id: f.id }));
