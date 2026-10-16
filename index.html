@@ -1954,8 +1954,8 @@
 
     if (v.type === 'home') {
       contentEl.appendChild(buildUnsortedCard());
-      renderShortcutSection();
       renderFolderSection('root');
+      renderShortcutSection();
     } else if (v.type === 'folder') {
       contentEl.appendChild(buildShortcutToggle(v.id));
       // 写真を上、中のフォルダを下に表示する
