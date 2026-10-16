@@ -1,5 +1,5 @@
 // オフラインでも画面を開けるよう、アプリのファイルをキャッシュする
-const CACHE = 'photo-v5';
+const CACHE = 'photo-v6';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

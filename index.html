@@ -668,6 +668,20 @@
     cursor: pointer;
   }
   .sort-controls button:disabled { opacity: 0.4; }
+  .shortcut-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin: 8px 0 0;
+  }
+  .small-btn.on {
+    background: var(--folder);
+    color: #fff;
+  }
+  .chip.star {
+    background: var(--folder);
+  }
+  .shortcut-grid { margin-bottom: 4px; }
+  .shortcut-grid .dest-btn { background: var(--folder); }
   .dest-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1003,6 +1017,7 @@
     <button id="backBtn" class="back-icon-btn hidden" aria-label="戻る">←</button>
     <button id="homeBtn" class="icon-btn home-btn" aria-label="ホーム">🏠</button>
     <div id="breadcrumb" class="breadcrumb"></div>
+    <button id="folderSearchBtn" class="icon-btn" aria-label="フォルダを探して開く">🔍</button>
     <button id="dateSearchBtn" class="icon-btn" aria-label="日付で探す">📅</button>
     <button id="settingsBtn" class="icon-btn" aria-label="設定">⚙</button>
   </header>
@@ -1104,6 +1119,10 @@
     <p id="pickerTitle" class="modal-message">行き先のフォルダ</p>
     <input id="pickerSearch" type="search" class="modal-input" placeholder="🔍 フォルダ名で検索">
     <div class="picker-scroll">
+      <div id="pickerStarWrap">
+        <p class="picker-label">⭐ ショートカット</p>
+        <div id="pickerStar" class="chip-row"></div>
+      </div>
       <div id="pickerRecentWrap">
         <p class="picker-label">最近使ったフォルダ</p>
         <div id="pickerRecent" class="chip-row"></div>
@@ -1935,8 +1954,10 @@
 
     if (v.type === 'home') {
       contentEl.appendChild(buildUnsortedCard());
+      renderShortcutSection();
       renderFolderSection('root');
     } else if (v.type === 'folder') {
+      contentEl.appendChild(buildShortcutToggle(v.id));
       // 写真を上、中のフォルダを下に表示する
       const photos = photosIn(v.id);
       contentEl.appendChild(buildPhotoSection(`写真 ${photos.length}枚`, photos, false));
@@ -1971,6 +1992,64 @@
     }
     contentEl.scrollTop = scrollTop;
   }
+
+  // ---------- フォルダのショートカット(よく使うフォルダをホームから1回で開く) ----------
+  function shortcutFolders() {
+    return liveFolders().filter((f) => f.pinned && folderPath(f.id).length).sort(byName);
+  }
+
+  function setShortcut(f, on) {
+    f.pinned = on;
+    touch(f);
+    saveData();
+    showToast(on ? `「${f.name}」をショートカットに追加しました(ホームに表示されます)` : `「${f.name}」をショートカットから外しました`);
+    refreshCurrentView();
+  }
+
+  function renderShortcutSection() {
+    const list = shortcutFolders();
+    if (!list.length) return;
+    const head = document.createElement('div');
+    head.className = 'section-head';
+    head.textContent = `⭐ ショートカット ${list.length}箇所`;
+    contentEl.appendChild(head);
+    const grid = document.createElement('div');
+    grid.className = 'dest-grid shortcut-grid';
+    list.forEach((f) => {
+      const b = document.createElement('button');
+      b.className = 'dest-btn';
+      const n = document.createElement('span');
+      n.className = 'dest-name';
+      n.textContent = f.name;
+      b.appendChild(n);
+      const parents = folderPath(f.id).slice(0, -1).map((x) => x.name).join(' › ');
+      const sub = document.createElement('span');
+      sub.className = 'dest-sub';
+      sub.textContent = (parents ? parents + ' ・ ' : '') + `${countDeep(f.id)}枚`;
+      b.appendChild(sub);
+      b.addEventListener('click', () => goToFolder(f.id));
+      grid.appendChild(b);
+    });
+    contentEl.appendChild(grid);
+  }
+
+  function buildShortcutToggle(folderId) {
+    const f = getFolder(folderId);
+    const bar = document.createElement('div');
+    bar.className = 'shortcut-bar';
+    const b = document.createElement('button');
+    b.className = 'small-btn' + (f.pinned ? ' on' : '');
+    b.textContent = f.pinned ? '⭐ ショートカット登録中' : '☆ ショートカットに追加';
+    b.addEventListener('click', () => setShortcut(f, !f.pinned));
+    bar.appendChild(b);
+    return bar;
+  }
+
+  // フォルダ名で探して、そのフォルダを開く
+  $('folderSearchBtn').addEventListener('click', () => {
+    openPicker({ title: 'フォルダを探して開く', mode: 'jump', onPick: (id) => goToFolder(id) });
+    setTimeout(() => $('pickerSearch').focus(), 50);
+  });
 
   function buildUnsortedCard() {
     const n = unsortedPhotos().length;
@@ -2897,6 +2976,7 @@
 
   // ---------- 行き先フォルダを選ぶ画面 ----------
   // mode 'photos': 写真の行き先(ホームには置けない) / mode 'folder': フォルダの移動先(ホーム直下も可)
+  // mode 'jump': フォルダを探して開く
   let picker = null;
 
   function openPicker(opts) {
@@ -2938,6 +3018,18 @@
     recentEl.innerHTML = '';
     crumbEl.innerHTML = '';
     listEl.innerHTML = '';
+
+    const stars = shortcutFolders().map((f) => f.id).filter(pickerAllows);
+    $('pickerStarWrap').classList.toggle('hidden', !!q || !stars.length);
+    $('pickerStar').innerHTML = '';
+    stars.forEach((id) => {
+      const c = document.createElement('button');
+      c.className = 'chip star';
+      c.textContent = '⭐ ' + getFolder(id).name;
+      c.title = folderLabel(id);
+      c.addEventListener('click', () => choose(id));
+      $('pickerStar').appendChild(c);
+    });
 
     const recent = getRecent().filter(pickerAllows).slice(0, 6);
     recentWrap.classList.toggle('hidden', !!q || !recent.length);
@@ -3010,7 +3102,10 @@
     const atRoot = picker.browse === 'root';
     const hereBtn = $('pickerHereBtn');
     if (q) hereBtn.classList.add('hidden');
-    else if (picker.mode === 'folder') {
+    else if (picker.mode === 'jump') {
+      hereBtn.classList.toggle('hidden', atRoot);
+      if (!atRoot) hereBtn.textContent = `「${getFolder(picker.browse).name}」を開く`;
+    } else if (picker.mode === 'folder') {
       hereBtn.classList.remove('hidden');
       hereBtn.textContent = atRoot ? 'ホーム直下に移動' : `「${getFolder(picker.browse).name}」に決定`;
     } else {
@@ -3018,6 +3113,7 @@
       if (!atRoot) hereBtn.textContent = `「${getFolder(picker.browse).name}」に決定`;
     }
     $('pickerUnsortedBtn').classList.toggle('hidden', !(picker.mode === 'photos' && picker.allowUnsorted));
+    $('pickerNewBtn').classList.toggle('hidden', picker.mode === 'jump');
   }
 
   $('pickerSearch').addEventListener('input', renderPicker);
