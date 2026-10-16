@@ -365,6 +365,53 @@
     padding: 1px 4px;
     pointer-events: none;
   }
+  .tile-video {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    border-radius: 6px;
+    padding: 1px 5px;
+    pointer-events: none;
+  }
+  .selecting .tile-video { display: none; }
+  .photo-stage video {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+    background: #000;
+  }
+  .play-overlay {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 30px;
+    cursor: pointer;
+  }
+  .choice-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .choice-list button {
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+  }
   .tile-check {
     position: absolute;
     top: 5px;
@@ -1047,6 +1094,8 @@
   <div class="photo-scroll">
     <div id="photoStage" class="photo-stage">
       <img id="photoImg" alt="">
+      <video id="photoVideo" class="hidden" controls playsinline preload="metadata"></video>
+      <button id="photoPlayBtn" class="play-overlay hidden" aria-label="再生">▶</button>
       <button id="photoPrevBtn" class="nav-arrow left" aria-label="前の写真">‹</button>
       <button id="photoNextBtn" class="nav-arrow right" aria-label="次の写真">›</button>
       <div id="photoLoading" class="loading-note hidden">読み込み中…</div>
@@ -1056,6 +1105,7 @@
     <div class="fields">
       <div class="orig-row">
         <button id="photoOrigBtn" class="small-btn">🔍 元の画質で見る</button>
+        <button id="photoDriveBtn" class="small-btn hidden">Googleドライブで開く</button>
         <span id="photoOrigNote" class="meta-text"></span>
       </div>
       <label class="field-label" for="photoName">名前</label>
@@ -1087,6 +1137,7 @@
   </header>
   <div id="sortStage" class="sort-stage">
     <img id="sortImg" alt="">
+    <button id="sortPlayBtn" class="play-overlay hidden" aria-label="動画を再生">▶</button>
     <div id="sortDone" class="sort-done hidden"></div>
   </div>
   <div id="sortInfo" class="sort-info">
@@ -1150,6 +1201,9 @@
       <button id="syncNowBtn" class="modal-btn-secondary">今すぐ同期</button>
     </div>
     <div class="settings-actions">
+      <button id="wifiOnlyBtn" class="modal-btn-secondary"></button>
+    </div>
+    <div class="settings-actions">
       <button id="changePinBtn" class="modal-btn-secondary">PINコードを変更</button>
       <button id="bioOnBtn" class="modal-btn-secondary hidden">👆 指紋でも解除できるようにする</button>
       <button id="bioOffBtn" class="modal-btn-secondary hidden">指紋での解除をやめる</button>
@@ -1162,8 +1216,22 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<div id="captureOverlay" class="modal-overlay hidden">
+  <div class="modal">
+    <p class="modal-message">撮影</p>
+    <div class="choice-list">
+      <button id="capturePhotoBtn" class="modal-btn-primary" data-skip-signin="1">📷 写真を撮る</button>
+      <button id="captureVideoBtn" class="modal-btn-primary" data-skip-signin="1">🎥 動画を撮る</button>
+    </div>
+    <div class="modal-actions">
+      <button id="captureCancelBtn" class="modal-btn-secondary">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden">
-<input id="pickInput" type="file" accept="image/*" multiple class="hidden">
+<input id="videoInput" type="file" accept="video/*" capture="environment" class="hidden">
+<input id="pickInput" type="file" accept="image/*,video/*" multiple class="hidden">
 
 <script>
   const STORAGE_KEY = 'photoAppData_v1';
@@ -1510,6 +1578,113 @@
     return isNaN(d.getTime()) ? null : d.getTime();
   }
 
+  // ---------- 動画 ----------
+  function isVideoFile(file) {
+    return /^video\//.test(file.type || '') || /\.(mp4|mov|m4v|3gp|webm|mkv)$/i.test(file.name || '');
+  }
+  const isVideo = (p) => p && p.kind === 'video';
+
+  function formatDuration(sec) {
+    sec = Math.round(sec || 0);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return h ? `${h}:${pad2(m)}:${pad2(s)}` : `${m}:${pad2(s)}`;
+  }
+
+  function formatSize(bytes) {
+    if (!bytes) return '';
+    return bytes >= 1024 * 1024 * 1024 ? (bytes / 1024 / 1024 / 1024).toFixed(1) + 'GB' : Math.max(1, Math.round(bytes / 1024 / 1024)) + 'MB';
+  }
+
+  // MP4/MOVの撮影日時(mvhdの作成日時。1904年1月1日からの秒数・UTC)を読む
+  async function readMp4Date(file) {
+    try {
+      const readAt = async (pos, len) => new DataView(await file.slice(pos, pos + len).arrayBuffer());
+      let pos = 0;
+      for (let guard = 0; guard < 64 && pos + 8 <= file.size; guard++) {
+        const h = await readAt(pos, 16);
+        let size = h.getUint32(0);
+        const type = String.fromCharCode(h.getUint8(4), h.getUint8(5), h.getUint8(6), h.getUint8(7));
+        let headLen = 8;
+        if (size === 1) { size = h.getUint32(8) * 4294967296 + h.getUint32(12); headLen = 16; }
+        else if (size === 0) size = file.size - pos;
+        if (size < 8) return null;
+        if (type === 'moov') {
+          const v = await readAt(pos + headLen, Math.min(size - headLen, 64 * 1024));
+          for (let i = 0; i + 24 < v.byteLength; i++) {
+            if (v.getUint32(i + 4) === 0x6d766864) { // 'mvhd'
+              const ver = v.getUint8(i + 8);
+              const secs = ver === 1 ? v.getUint32(i + 12) * 4294967296 + v.getUint32(i + 16) : v.getUint32(i + 12);
+              const ms = (secs - 2082844800) * 1000;
+              // 2000年より前や未来の日時は「記録されていない」とみなす
+              return ms > 946684800000 && ms < Date.now() + 86400000 ? ms : null;
+            }
+          }
+          return null;
+        }
+        pos += size;
+      }
+    } catch (e) { /* 読めなければファイルの日付を使う */ }
+    return null;
+  }
+
+  // 動画の長さ・大きさと、一覧用の1コマ(読めない形式なら代わりの絵)を作る
+  async function videoInfo(file) {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.src = url;
+    let duration = 0;
+    let w = 0;
+    let h = 0;
+    let thumb = null;
+    try {
+      await new Promise((res, rej) => {
+        v.onloadeddata = res;
+        v.onerror = () => rej(new Error('video'));
+        setTimeout(() => rej(new Error('timeout')), 15000);
+      });
+      duration = isFinite(v.duration) ? v.duration : 0;
+      w = v.videoWidth;
+      h = v.videoHeight;
+      try {
+        v.currentTime = Math.max(0.1, Math.min(1, duration / 10));
+        await new Promise((res, rej) => { v.onseeked = res; setTimeout(() => rej(new Error('seek')), 8000); });
+      } catch (e) { /* 先頭のコマで作る */ }
+      if (w && h) {
+        const sc = Math.min(1, 360 / Math.max(w, h));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(w * sc));
+        c.height = Math.max(1, Math.round(h * sc));
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        thumb = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.75));
+      }
+    } catch (e) {
+      /* この端末で再生できない形式。代わりの絵を使う */
+    } finally {
+      v.removeAttribute('src');
+      v.load();
+      URL.revokeObjectURL(url);
+    }
+    if (!thumb) {
+      const c = document.createElement('canvas');
+      c.width = 360;
+      c.height = 360;
+      const g = c.getContext('2d');
+      g.fillStyle = '#2f3b38';
+      g.fillRect(0, 0, 360, 360);
+      g.font = '120px sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('🎬', 180, 180);
+      thumb = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.8));
+    }
+    return { duration, w, h, thumb };
+  }
+
   // ---------- 写真の取り込み ----------
   let importing = false;
 
@@ -1526,19 +1701,32 @@
       else showToast('取り込み中…', 60000);
       try {
         const now = Date.now();
-        let taken = await readExifDate(file);
-        if (!taken) taken = fromCamera ? now : (file.lastModified || now);
-        const v = await makeVariants(file, true);
         const id = genId();
-        await idbPut('pending', id, file);
-        await idbPut('thumbs', id, v.thumb);
-        await idbPut('views', id, v.view);
-        addLru(id);
-        data.photos[id] = {
-          id, name: defaultName(taken), memo: '', takenAt: taken, addedAt: now + i,
-          folderId: folderId || null, mime: file.type || 'image/jpeg', w: v.w, h: v.h,
-          driveId: null, thumbDriveId: null, updatedAt: now
-        };
+        if (isVideoFile(file)) {
+          let taken = await readMp4Date(file);
+          if (!taken) taken = fromCamera ? now : (file.lastModified || now);
+          const v = await videoInfo(file);
+          await idbPut('pending', id, file);
+          await idbPut('thumbs', id, v.thumb);
+          data.photos[id] = {
+            id, kind: 'video', name: defaultName(taken), memo: '', takenAt: taken, addedAt: now + i,
+            folderId: folderId || null, mime: file.type || 'video/mp4', w: v.w, h: v.h,
+            duration: v.duration, size: file.size, driveId: null, thumbDriveId: null, updatedAt: now
+          };
+        } else {
+          let taken = await readExifDate(file);
+          if (!taken) taken = fromCamera ? now : (file.lastModified || now);
+          const v = await makeVariants(file, true);
+          await idbPut('pending', id, file);
+          await idbPut('thumbs', id, v.thumb);
+          await idbPut('views', id, v.view);
+          addLru(id);
+          data.photos[id] = {
+            id, name: defaultName(taken), memo: '', takenAt: taken, addedAt: now + i,
+            folderId: folderId || null, mime: file.type || 'image/jpeg', w: v.w, h: v.h,
+            size: file.size, driveId: null, thumbDriveId: null, updatedAt: now
+          };
+        }
         ok++;
       } catch (e) {
         failed++;
@@ -1549,8 +1737,9 @@
       if (folderId) addRecent(folderId);
       saveData();
     }
-    let msg = ok ? `${ok}枚を「${folderLabel(folderId)}」に入れました` : '';
-    if (failed) msg += (msg ? '。' : '') + `${failed}枚は読み込めませんでした`;
+    let msg = ok ? `${ok}件を「${folderLabel(folderId)}」に入れました` : '';
+    if (ok && !canUploadMedia() && accessToken) msg += '(Wi-Fiにつながったらアップロードします)';
+    if (failed) msg += (msg ? '。' : '') + `${failed}件は読み込めませんでした`;
     showToast(msg || '写真がありませんでした', 2600);
     refreshCurrentView();
     processUploads();
@@ -1561,7 +1750,16 @@
     return v.type === 'folder' ? v.id : null;
   }
 
-  $('cameraBtn').addEventListener('click', () => $('cameraInput').click());
+  // 撮影ボタン: 写真か動画かを選んでからカメラを開く
+  const captureOverlay = $('captureOverlay');
+  $('cameraBtn').addEventListener('click', () => { captureOverlay.classList.remove('hidden'); ensureTrap(); });
+  $('captureCancelBtn').addEventListener('click', () => captureOverlay.classList.add('hidden'));
+  $('capturePhotoBtn').addEventListener('click', () => { captureOverlay.classList.add('hidden'); $('cameraInput').click(); });
+  $('captureVideoBtn').addEventListener('click', () => { captureOverlay.classList.add('hidden'); $('videoInput').click(); });
+  $('videoInput').addEventListener('change', (e) => {
+    const files = e.target.files;
+    addFiles(files, currentAddTarget(), true).finally(() => { e.target.value = ''; });
+  });
   $('pickBtn').addEventListener('click', () => $('pickInput').click());
   $('cameraInput').addEventListener('change', (e) => {
     const files = e.target.files;
@@ -1632,6 +1830,7 @@
   // 大きく表示するための画像(端末内にあればそれを、無ければDriveから元画像を取ってくる)
   const viewLoading = new Map();
   function getViewBlob(p) {
+    if (isVideo(p)) return Promise.resolve(null);
     if (viewLoading.has(p.id)) return viewLoading.get(p.id);
     const pr = (async () => {
       const cached = await idbGet('views', p.id);
@@ -1670,6 +1869,7 @@
         img.src = u;
       }
     }
+    if (isVideo(p)) { if (loadingEl) loadingEl.classList.add('hidden'); return; }
     if (loadingEl) loadingEl.classList.remove('hidden');
     const blob = await getViewBlob(p);
     if (loadingEl && isStillCurrent()) loadingEl.classList.add('hidden');
@@ -1722,6 +1922,7 @@
 
   function render() {
     const v = topView();
+    if (v.type !== 'photo') stopVideo(); // 写真の画面を離れたら動画の再生を止める
     if (v.type === 'photo') { showOnly(photoView); renderPhotoView(); }
     else if (v.type === 'sort') { showOnly(sortView); renderSortView(); }
     else { showOnly(mainView); renderMain(); }
@@ -1749,6 +1950,7 @@
   let trapped = false;
   function anyOverlayOpen() {
     return !modalOverlay.classList.contains('hidden') || !pickerOverlay.classList.contains('hidden') ||
+      !$('captureOverlay').classList.contains('hidden') ||
       !settingsOverlay.classList.contains('hidden') || $('photoStage').classList.contains('zoomed');
   }
   function ensureTrap() {
@@ -1767,6 +1969,7 @@
     if (!lockView.classList.contains('hidden')) return;
     if (!modalOverlay.classList.contains('hidden')) { $('modalCancel').click(); return; }
     if (!pickerOverlay.classList.contains('hidden')) { closePicker(); return; }
+    if (!captureOverlay.classList.contains('hidden')) { captureOverlay.classList.add('hidden'); return; }
     if (!settingsOverlay.classList.contains('hidden')) { settingsOverlay.classList.add('hidden'); return; }
     if ($('photoStage').classList.contains('zoomed')) { closeViewer(); return; }
     if (selecting) { exitSelect(); return; }
@@ -2200,6 +2403,12 @@
       badge.title = 'アップロード待ち';
       tile.appendChild(badge);
     }
+    if (isVideo(p)) {
+      const vb = document.createElement('span');
+      vb.className = 'tile-video';
+      vb.textContent = p.duration ? '▶ ' + formatDuration(p.duration) : '▶ 動画';
+      tile.appendChild(vb);
+    }
     const label = document.createElement('span');
     label.className = 'tile-label';
     label.textContent = showFolder ? folderLabel(photoFolder(p)) : p.name;
@@ -2423,7 +2632,14 @@
     const p = currentPhoto();
     if (!p) { popView(); return; }
     closeViewer();
+    stopVideo();
     photoStage.classList.remove('orig');
+    const video = isVideo(p);
+    photoImg.classList.toggle('hidden', false);
+    $('photoVideo').classList.add('hidden');
+    $('photoPlayBtn').classList.toggle('hidden', !video);
+    $('photoOrigBtn').classList.toggle('hidden', video);
+    $('photoDriveBtn').classList.toggle('hidden', !p.driveId);
     $('photoOrigBtn').disabled = false;
     $('photoOrigNote').textContent = '';
     $('photoTitle').textContent = p.name;
@@ -2449,10 +2665,71 @@
     $('photoPlace').textContent = fid ? '📁 ' + folderLabel(fid) : '📥 未整理';
     $('photoMeta').innerHTML = '';
     const lines = [`アプリに入れた日: ${formatDateTime(p.addedAt)}`];
-    if (p.w && p.h) lines.push(`大きさ: ${p.w} × ${p.h}`);
+    if (isVideo(p) && p.duration) lines.push(`動画の長さ: ${formatDuration(p.duration)}`);
+    if (p.w && p.h) lines.push(`大きさ: ${p.w} × ${p.h}` + (p.size ? `(${formatSize(p.size)})` : ''));
     lines.push(p.driveId ? 'Googleドライブ: 保存済み' : 'Googleドライブ: アップロード待ち');
     lines.forEach((l) => { const d = document.createElement('div'); d.textContent = l; $('photoMeta').appendChild(d); });
   }
+
+  // ---------- 動画の再生 ----------
+  const photoVideo = $('photoVideo');
+  function stopVideo() {
+    photoVideo.pause();
+    if (photoVideo.dataset.url) { URL.revokeObjectURL(photoVideo.dataset.url); delete photoVideo.dataset.url; }
+    photoVideo.removeAttribute('src');
+    photoVideo.load();
+  }
+
+  async function playCurrentVideo() {
+    const v = topView();
+    const p = currentPhoto();
+    if (!p || !isVideo(p)) return;
+    const still = () => topView() === v && v.id === p.id;
+    const loading = $('photoLoading');
+    let blob = await idbGet('pending', p.id);
+    if (!blob) {
+      if (!p.driveId) { loading.textContent = 'まだ別の端末からアップロードされていません'; loading.classList.remove('hidden'); return; }
+      if (!accessToken) { loading.textContent = 'Googleにサインインすると再生できます'; loading.classList.remove('hidden'); return; }
+      if (!isWifi() && !(await askMobileDownload(p))) return;
+      $('photoPlayBtn').classList.add('hidden');
+      loading.textContent = `動画を読み込み中…${p.size ? '(' + formatSize(p.size) + ')' : ''}`;
+      loading.classList.remove('hidden');
+      try {
+        const res = await driveApiFetch(`/drive/v3/files/${p.driveId}?alt=media`);
+        blob = res.ok ? await res.blob() : null;
+      } catch (e) { blob = null; }
+      if (!still()) return;
+      if (!blob) { loading.textContent = '読み込めませんでした'; $('photoPlayBtn').classList.remove('hidden'); return; }
+    }
+    if (!still()) return;
+    loading.classList.add('hidden');
+    $('photoPlayBtn').classList.add('hidden');
+    photoImg.classList.add('hidden');
+    const url = URL.createObjectURL(blob);
+    photoVideo.dataset.url = url;
+    photoVideo.src = url;
+    photoVideo.classList.remove('hidden');
+    photoVideo.play().catch(() => {});
+    photoVideo.onerror = () => {
+      if (!still()) return;
+      loading.textContent = 'この動画の形式はこの端末では再生できません。「Googleドライブで開く」を試してください';
+      loading.classList.remove('hidden');
+    };
+  }
+
+  function askMobileDownload(p) {
+    return new Promise((resolve) => {
+      showConfirm('モバイル回線で動画を読み込みますか？', `${p.size ? formatSize(p.size) + 'の' : ''}通信量がかかります。Wi-Fiにつないでから見ることもできます。`, '読み込む', () => resolve(true));
+      const cb = modalCallback;
+      modalCallback = (ok) => { if (cb) cb(ok); if (!ok) resolve(false); };
+    });
+  }
+
+  $('photoPlayBtn').addEventListener('click', (e) => { e.stopPropagation(); playCurrentVideo(); });
+  $('photoDriveBtn').addEventListener('click', () => {
+    const p = currentPhoto();
+    if (p && p.driveId) window.open(`https://drive.google.com/file/d/${p.driveId}/view`, '_blank');
+  });
 
   function showSibling(delta) {
     const v = topView();
@@ -2502,7 +2779,7 @@
   $('photoDate').addEventListener('change', onDateTimeChange);
   $('photoTime').addEventListener('change', onDateTimeChange);
 
-  $('photoBackBtn').addEventListener('click', () => { flushPhotoSave(); popView(); });
+  $('photoBackBtn').addEventListener('click', () => { flushPhotoSave(); stopVideo(); popView(); });
   $('photoPrevBtn').addEventListener('click', (e) => { e.stopPropagation(); showSibling(-1); });
   $('photoNextBtn').addEventListener('click', (e) => { e.stopPropagation(); showSibling(1); });
   $('photoMoveBtn').addEventListener('click', () => {
@@ -2529,7 +2806,7 @@
   // タップで拡大、左右スワイプで前後の写真へ
   let swipeStart = null;
   photoStage.addEventListener('touchstart', (e) => {
-    if (photoStage.classList.contains('zoomed') || e.touches.length !== 1) { swipeStart = null; return; }
+    if (photoStage.classList.contains('zoomed') || e.touches.length !== 1 || e.target === photoVideo) { swipeStart = null; return; }
     swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   }, { passive: true });
   photoStage.addEventListener('touchend', (e) => {
@@ -2541,6 +2818,7 @@
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) showSibling(dx < 0 ? 1 : -1);
   });
   photoImg.addEventListener('click', () => {
+    if (isVideo(currentPhoto())) { playCurrentVideo(); return; }
     if (!photoStage.classList.contains('zoomed')) openViewer('fit');
   });
 
@@ -2650,7 +2928,8 @@
   }
 
   photoStage.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button')) return;
+    if (e.target.closest('button') || e.target === photoVideo) return;
+    if (isVideo(currentPhoto())) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     zPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (!photoStage.classList.contains('zoomed')) {
@@ -2824,6 +3103,7 @@
     const done = $('sortDone');
     if (!p) {
       sortImg.classList.add('hidden');
+      $('sortPlayBtn').classList.add('hidden');
       $('sortInfo').classList.add('hidden');
       $('destGrid').innerHTML = '';
       done.classList.remove('hidden');
@@ -2859,6 +3139,7 @@
     if (!fromSync || prevId !== p.id || !sortImg.getAttribute('src')) {
       const id = p.id;
       showLargeImage(sortImg, p, () => topView().type === 'sort' && sortState && sortState.currentId === id, null);
+      $('sortPlayBtn').classList.toggle('hidden', !isVideo(p));
       // 次の写真を先に読み込んでおく
       const nextP = sortQueue().find((x) => x.id !== id && !sortState.skipped.has(x.id));
       if (nextP) getViewBlob(nextP);
@@ -2966,6 +3247,11 @@
       sortState.currentId = pickNextSortId();
       renderSortView();
     });
+  });
+
+  $('sortPlayBtn').addEventListener('click', () => {
+    const p = sortCurrent();
+    if (p) { pushView({ type: 'photo', id: p.id, list: [p.id] }); playCurrentVideo(); }
   });
 
   $('sortInfoBtn').addEventListener('click', () => {
@@ -3175,8 +3461,12 @@
   async function updateUploadStatus() {
     const keys = await idbKeys('pending');
     const n = keys.filter((id) => data.photos[id] && !data.photos[id].deleted).length;
-    const text = n ? `☁ Googleドライブへのアップロード待ち ${n}枚` + (accessToken ? (uploadBusy ? '(アップロード中…)' : '') : '(サインインすると送ります)') : '';
-    uploadStatusText.textContent = text || '☁ すべての写真をGoogleドライブに保存済みです';
+    let note = '';
+    if (!accessToken) note = '(サインインすると送ります)';
+    else if (!canUploadMedia()) note = '(Wi-Fiにつながったら送ります)';
+    else if (uploadBusy) note = '(アップロード中…)';
+    const text = n ? `☁ Googleドライブへのアップロード待ち ${n}件` + note : '';
+    uploadStatusText.textContent = text || '☁ すべての写真・動画をGoogleドライブに保存済みです';
     const homeEl = $('homeUploadStatus');
     if (homeEl) {
       homeEl.textContent = text;
@@ -3367,8 +3657,33 @@
 
   function photoFileName(p) {
     const d = new Date(p.takenAt || Date.now());
-    const ext = /png/.test(p.mime) ? 'png' : /webp/.test(p.mime) ? 'webp' : /gif/.test(p.mime) ? 'gif' : /heic|heif/.test(p.mime) ? 'heic' : 'jpg';
+    const ext = isVideo(p) ? (/quicktime/.test(p.mime) ? 'mov' : /webm/.test(p.mime) ? 'webm' : /3gpp/.test(p.mime) ? '3gp' : 'mp4') :
+      /png/.test(p.mime) ? 'png' : /webp/.test(p.mime) ? 'webp' : /gif/.test(p.mime) ? 'gif' : /heic|heif/.test(p.mime) ? 'heic' : 'jpg';
     return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}_${p.id.slice(-6)}.${ext}`;
+  }
+
+  // ---------- Wi-Fiのときだけアップロード ----------
+  const WIFI_ONLY_KEY = 'photoAppWifiOnly_v1';
+  const wifiOnly = () => localStorage.getItem(WIFI_ONLY_KEY) !== '0'; // 最初はオン
+  // 回線の種類が分かる端末(AndroidのChrome)でだけ判定する。分からない端末では制限しない
+  function isWifi() {
+    const c = navigator.connection;
+    if (!c || !c.type) return true;
+    return c.type === 'wifi' || c.type === 'ethernet';
+  }
+  const canUploadMedia = () => !wifiOnly() || isWifi();
+
+  function updateWifiOnlyUI() {
+    $('wifiOnlyBtn').textContent = wifiOnly() ? '📶 Wi-Fiのときだけアップロード: オン' : '📶 Wi-Fiのときだけアップロード: オフ(モバイル回線でも送る)';
+  }
+  $('wifiOnlyBtn').addEventListener('click', () => {
+    localStorage.setItem(WIFI_ONLY_KEY, wifiOnly() ? '0' : '1');
+    updateWifiOnlyUI();
+    updateUploadStatus();
+    processUploads();
+  });
+  if (navigator.connection && navigator.connection.addEventListener) {
+    navigator.connection.addEventListener('change', () => { updateUploadStatus(); processUploads(); });
   }
 
   // 端末に残っている「アップロード待ち」の写真をDriveに送る。削除した写真はDriveのゴミ箱へ
@@ -3388,9 +3703,9 @@
           if (cur) { cur.driveTrashed = true; changed = true; }
         }
       }
-      const keys = await idbKeys('pending');
+      const keys = canUploadMedia() ? await idbKeys('pending') : [];
       for (const id of keys) {
-        if (!accessToken) break;
+        if (!accessToken || !canUploadMedia()) break;
         let p = data.photos[id];
         if (!p || p.deleted) { await idbDel('pending', id); continue; }
         if (!p.driveId) {
@@ -3590,6 +3905,7 @@
   // ---------- 設定 ----------
   $('settingsBtn').addEventListener('click', () => {
     settingsOverlay.classList.remove('hidden');
+    updateWifiOnlyUI();
     updateSyncStatusUI();
     ensureTrap();
   });
